@@ -1,0 +1,48 @@
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvsca*
+*.njsproj
+*.sln
+*.sw?
+
+# Build outputs
+**/build/
+**/bin/
+**/obj/
+**/dist/
+**/*.exe
+**/*.dll
+**/*.so
+**/*.dylib
+
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+pubspec.lock
+# (Keep pubspec.lock in app or packages if desired, but local packages can ignore it. Actually, app/pubspec.lock is usually committed in Flutter apps, but packages shouldn't. Let's not ignore it globally but we can ignore it in packages if needed.)
+
+# Rust/Cargo
+**/target/
+**/*.rs.bk
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# App specific
+**/activities.json
+**/mwendo_recovery.json
+
+# Test Companion onboarding (local, per-machine)
+.test-companion/
+
+# Local diagnostic/crash logs
+*.log
+build_output.txt
+Log 1.jpeg
+
+

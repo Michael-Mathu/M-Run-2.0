@@ -1,0 +1,16 @@
+questions:
+  - question: "What is the recommended walk-run ratio for beginners?"
+    options: ["1:2", "1:1", "2:1", "Continuous"]
+    answer: 1
+  - question: "How long should warm-up be before running?"
+    options: ["2 minutes", "5 minutes", "10 minutes", "No warm-up needed"]
+    answer: 1
+  - question: "How many rest days per week are recommended?"
+    options: ["0", "1-2", "3-4", "Run daily"]
+    answer: 1
+  - question: "What distance completes the First Run challenge?"
+    options: ["0.1 km", "0.5 km", "1 km", "5 km"]
+    answer: 1
+  - question: "What triggers a personal record update?"
+    options: ["Beating your previous time for the distance"]
+    answer: 0

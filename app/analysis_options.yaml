@@ -1,0 +1,165 @@
+# This file configures the analyzer, which statically analyzes Dart code to
+# check for errors, warnings, and lints.
+#
+# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
+# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
+# invoked from the command line by running `flutter analyze`.
+
+# The following line activates a set of recommended lints for Flutter apps,
+# packages, and plugins designed to encourage good coding practices.
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # disallow_print: false  # Uncomment to disable the `avoid_print` rule
+    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+
+# Design system convention (enforced by code review):
+#   - Screen/feature files MUST NOT contain hardcoded spacing, colors, radii, or shadows.
+#   - All values live in lib/core/theme/app_theme.dart or lib/design_system/ components.
+#   - Exception: one-off values that are genuinely unique to a single widget and
+#     unlikely to be reused may be inlined, but must be reviewed.
+
+# Lint rule: reject hardcoded spacing, colors, radii, shadows in screen/feature files.
+# This rule will be added in Phase 1.
+# The rule implementation will reject hardcoded values in files under:
+#   lib/features/* (features)
+#   lib/widgets (existing canonical components)
+#   lib/design_system (new canonical components)
+
+# Additional information about this file can be found at
+# https://dart.dev/guides/language/analysis-options
+
+# Lint rules to add (Phase 1):
+# - prefer_const_constructors
+# - avoid_init_to_null
+# - annotate_overrides
+# - omit_local_variable_types
+# - unnecessary_this
+# - unnecessary_lambdas
+# - unnecessary_string_escapes
+# - unnecessary_string_interpolations
+# - unnecessary_braces_in_string_interps
+# - prefer_single_quotes
+# - prefer_relative_imports
+# - sort_child_properties_last
+# - avoid_single_cascade_in_method_invocation
+# - avoid_relative_lib_imports
+# - use_key_in_widget_constructors
+# - prefer_int casts
+# - avoid_redundant_argument_values
+# - avoid_unused_parameters
+# - avoid_returning_null_for_future
+# - prefer_void_to_null
+# - avoid_null_checks_in_equality_operators
+# - prefer_generic_function_type_aliases
+# - avoid_private_typedef_functions
+# - avoid_shadowing_type_parameters
+# - avoid_multiple_declarations_per_line
+# - sort_constructors_first
+# - sort_pub_dependencies_first
+# - always_put_control_body_on_new_line
+# - always_specify_types
+# - annotate_overrides
+# - avoid_annotating_overrides
+# - avoid_init_to_null
+# - avoid_creating_instances_of_private_classes
+# - avoid_disallowed_classes
+# - avoid_double_and_int_division
+# - avoid_equals_and_hash_code_on_mutable_classes
+# - avoid_extensions_on_override
+# - avoid_final_parameters
+# - avoid_function_literals_in_foreach_calls
+# - avoid_implementing_value_types
+# - avoid_init_to_null
+# - avoid_null_checks_in_equality_operators
+# - avoid_positional_arguments
+# - avoid_private_typedef_functions
+# - avoid_relative_imports
+# - avoid_renaming_method_parameters
+# - avoid_returning_this
+# - avoid_setters_without_getters
+# - avoid_shadowing_type_parameters
+# - avoid_single_cascade_in_method_invocation
+# - avoid_types_as_parameter_names
+# - avoid_unused_parameters
+# - avoid_void_checks
+# - cancel_subscriptions
+# - cascade_invocations
+# - close_sinks
+# - comment_references
+# - directives_ordering
+# - discard_assignment
+# - duplicate_ignore
+# - empty_statements
+# - hash_and_equals
+# - invariant_decorator
+# - library_prefixes
+# - library_names
+# - lines_longer_than_80_chars
+# - missing_whitespace_between_adjacent_strings
+# - no_runtime_types
+# - null_checks_on_nullable_types
+# - null_closures
+# - omit_local_variable_types
+# - only_mark_test_methods
+# - prefer_asserts_in_initializer_lists
+# - prefer_collection_literals
+# - prefer_conditional_assignment
+# - prefer_const_constructors
+# - prefer_const_declarations
+# - prefer_double_quotes
+# - prefer_expression_function_bodies
+# - prefer_final_locals
+# - prefer_for_element_to_map_reduce
+# - prefer_functional_complications
+# - prefer_generic_function_type_aliases
+# - prefer_interpolation_to_compose_strings
+# - prefer_is_empty
+# - prefer_is_not_empty
+# - prefer_iterable_whereType
+# - prefer_null_aware_operator
+# - prefer_relative_imports
+# - prefer_single_quotes
+# - prefer_spread_operator
+# - prefer_typing_uninitialized_variables
+# - provide_deprecation_message
+# - public_member_api_docs
+# - sort_child_properties_last
+# - sort_constructors_first
+# - sort_pub_dependencies_first
+# - sort_unnamed_constructors_first
+# - type_init_formals
+# - type_parameter_biases
+# - unawaited_futures
+# - unnecessary_await_in_return
+# - unnecessary_breaks
+# - unnecessary_constructor_name
+# - unnecessary_getters_setters
+# - unnecessary_null_aware_before_operator
+# - unnecessary_null_checks
+# - unnecessary_null_in_if_null_operators
+# - unnecessary_null_in_spread_collections
+# - unnecessary_overrides
+# - unnecessary_parenthesis
+# - unnecessary_statements
+# - unnecessary_this
+# - use_block_effect_in_async_composition
+# - use_build_context_synchronously
+# - use_colored_box_decorations
+# - use_decorated_box
+# - use_enums
+# - use_if_null_operators
+# - use_is_even_rather_than_modulo
+# - use_key_in_widget_constructors
+# - use_late_for_private_fields
+# - use_late_for_types
+# - use_named_parameters
+# - use_null_aware_before_operator
+# - use_raw_strings
+# - use_rethrow
+# - use_setters_to_change_properties
+# - use_string_in_part_of_directives
+# - use_super_parameters
+# - use_to_LowerCase
+# - use_to_String_in_equality_checks
