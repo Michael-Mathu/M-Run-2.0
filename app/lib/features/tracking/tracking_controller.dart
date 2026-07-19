@@ -83,6 +83,8 @@ class TrackingModel extends Notifier<TrackingState> {
   double _smoothLat = 0;
   double _smoothLng = 0;
   bool _hasSmooth = false;
+  double _kalmanVariance = -1;
+  DateTime? _lastFilterTime;
   static const double _cullMeters = 10.0;
 
   /// Serial command queue — prevents start/stop/pause race conditions during
@@ -267,6 +269,8 @@ class TrackingModel extends Notifier<TrackingState> {
     _pts.clear();
     _displayPts.clear();
     _hasSmooth = false;
+    _kalmanVariance = -1;
+    _lastFilterTime = null;
     _elevationGain = 0;
     _accumulatedMs = 0;
     _accumulatedMovingMs = 0;
@@ -350,15 +354,29 @@ class TrackingModel extends Notifier<TrackingState> {
   /// Sharp turns are detected and preserved; shallow angles trigger tighter culling.
   void _addDisplayPoint(TrackPoint p) {
     final isMoving = p.speedMps > 0.3;
+    final now = p.timestamp;
     
-    if (!_hasSmooth) {
+    if (!_hasSmooth || _lastFilterTime == null) {
       _smoothLat = p.lat;
       _smoothLng = p.lng;
+      _kalmanVariance = (p.accuracy > 0 ? p.accuracy.toDouble() : 10.0) * (p.accuracy > 0 ? p.accuracy.toDouble() : 10.0);
+      _lastFilterTime = now;
       _hasSmooth = true;
     } else {
-      final a = _adaptiveAlpha(p);
-      _smoothLat = a * p.lat + (1 - a) * _smoothLat;
-      _smoothLng = a * p.lng + (1 - a) * _smoothLng;
+      final dt = now.difference(_lastFilterTime!).inMilliseconds / 1000.0;
+      if (dt > 0) {
+        final motionSigma = isMoving ? 5.0 : 0.5;
+        final q = (motionSigma * dt) * (motionSigma * dt);
+        _kalmanVariance += q;
+        
+        final r = (p.accuracy > 0 ? p.accuracy.toDouble() : 10.0) * (p.accuracy > 0 ? p.accuracy.toDouble() : 10.0);
+        final k = _kalmanVariance / (_kalmanVariance + r);
+        
+        _smoothLat += k * (p.lat - _smoothLat);
+        _smoothLng += k * (p.lng - _smoothLng);
+        _kalmanVariance = (1 - k) * _kalmanVariance;
+        _lastFilterTime = now;
+      }
     }
     
     if (_displayPts.isNotEmpty) {
@@ -375,17 +393,7 @@ class TrackingModel extends Notifier<TrackingState> {
         );
         
         if (isSharpTurn) {
-          _displayPts.add(TrackPoint(
-            lat: _smoothLat,
-            lng: _smoothLng,
-            elevation: p.elevation,
-            timestamp: p.timestamp,
-            speedMps: p.speedMps,
-            heartRate: p.heartRate,
-            cadence: p.cadence,
-            accuracy: p.accuracy,
-            state: p.state,
-          ));
+          _displayPts.add(_makeSmoothedPoint(p));
           return;
         }
       }
@@ -394,7 +402,11 @@ class TrackingModel extends Notifier<TrackingState> {
       if (d < _cullMeters / 2) return;
     }
     
-    _displayPts.add(TrackPoint(
+    _displayPts.add(_makeSmoothedPoint(p));
+  }
+
+  TrackPoint _makeSmoothedPoint(TrackPoint p) {
+    return TrackPoint(
       lat: _smoothLat,
       lng: _smoothLng,
       elevation: p.elevation,
@@ -404,28 +416,30 @@ class TrackingModel extends Notifier<TrackingState> {
       cadence: p.cadence,
       accuracy: p.accuracy,
       state: p.state,
-    ));
+    );
   }
 
-  /// Detects sharp turns (angle > 120 degrees) to preserve path shape.
+  /// Detects sharp turns (angle > 45 degrees) to preserve path shape.
   bool _isSharpTurn(TrackPoint a, TrackPoint b, TrackPoint c) {
     final angle = _angleBetween(
       a.lat, a.lng,
       b.lat, b.lng,
       c.lat, c.lng,
     );
-    return angle < 30;
+    return angle > 45;
   }
 
   double _angleBetween(double lat1, double lng1, double lat2, double lng2, double lat3, double lng3) {
-    final dx1 = lng2 - lng1;
+    final cosLat = cos(_toRad(lat2));
+    final dx1 = (lng2 - lng1) * cosLat;
     final dy1 = lat2 - lat1;
-    final dx2 = lng3 - lng2;
+    final dx2 = (lng3 - lng2) * cosLat;
     final dy2 = lat3 - lat2;
+    
     final dot = dx1 * dx2 + dy1 * dy2;
     final mag1 = sqrt(dx1 * dx1 + dy1 * dy1);
     final mag2 = sqrt(dx2 * dx2 + dy2 * dy2);
-    if (mag1 == 0 || mag2 == 0) return 180;
+    if (mag1 == 0 || mag2 == 0) return 0;
     final cosAngle = (dot / (mag1 * mag2)).clamp(-1.0, 1.0);
     return acos(cosAngle) * 180 / pi;
   }
@@ -435,21 +449,11 @@ class TrackingModel extends Notifier<TrackingState> {
   void _rebuildDisplay() {
     _displayPts.clear();
     _hasSmooth = false;
+    _kalmanVariance = -1;
+    _lastFilterTime = null;
     for (final p in _pts) {
       _addDisplayPoint(p);
     }
-  }
-
-  // Adaptive Kalman-style filter: higher accuracy (smaller meters) → larger alpha (snappier);
-  // poor accuracy → smaller alpha (heavier smoothing). Idle → minimal motion assumed, aggressive smoothing.
-  double _adaptiveAlpha(TrackPoint p) {
-    final isMoving = p.speedMps > 0.3;
-    if (!isMoving) return 0.15;
-    if (p.accuracy <= 0) return 0.5;
-    if (p.accuracy <= 5) return 0.65;
-    if (p.accuracy <= 10) return 0.45;
-    if (p.accuracy <= 20) return 0.3;
-    return 0.2;
   }
 
   void pause() => _enqueue(() async {
@@ -481,6 +485,8 @@ class TrackingModel extends Notifier<TrackingState> {
         _pts.clear(); // Clear points before recovery clear (fixes Bug #7)
         _displayPts.clear();
         _hasSmooth = false;
+        _kalmanVariance = -1;
+        _lastFilterTime = null;
         _sub?.cancel();
         _sub = null;
         _stopTicker();
