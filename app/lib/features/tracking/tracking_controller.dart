@@ -300,8 +300,6 @@ class TrackingModel extends Notifier<TrackingState> {
   }
 
   void _onPoint(TrackPoint p) {
-    _pts.add(p);
-    _addDisplayPoint(p);
     final isMoving = p.speedMps > 0.3;
     
     // Track moving time: start timer if speed > 0.3 m/s
@@ -311,36 +309,45 @@ class TrackingModel extends Notifier<TrackingState> {
       _accumulatedMovingMs += DateTime.now().difference(_movingStart!).inMilliseconds;
       _movingStart = null;
     }
-    
-    if (_pts.length == 1) {
+
+    if (_pts.isNotEmpty) {
+      // ponytail: halt point recording when stationary or inaccurate to prevent distance inflation and jagged polylines.
+      if (!isMoving || p.accuracy > 20) return;
+
+      final prev = _pts.last;
+      final d = _haversine(prev.lat, prev.lng, p.lat, p.lng);
+      
+      // Ignore micro-movements (GPS drift) even if speed temporarily spiked
+      if (d < 2.0) return;
+
+      final gained = (p.elevation - prev.elevation);
+      if (gained > 0) _elevationGain += gained;
+      
       state = state.copyWith(
         state: AppEngineState.recording,
-        paceMinPerKm: p.speedMps > 0.3 ? 1000 / (p.speedMps * 60) : 0.0,
+        distanceM: state.distanceM + d,
+        paceMinPerKm: 1000 / (p.speedMps * 60),
+        heartRate: p.heartRate,
+        cadence: p.cadence,
+        elevationGainM: _elevationGain,
+        calories: (state.elapsedMs / 60000 * 11).round(),
+        pointCount: _pts.length + 1,
+      );
+    } else {
+      state = state.copyWith(
+        state: AppEngineState.recording,
+        paceMinPerKm: isMoving ? 1000 / (p.speedMps * 60) : 0.0,
         heartRate: p.heartRate,
         cadence: p.cadence,
         elevationGainM: 0,
         calories: 0,
         pointCount: 1,
       );
-      return;
     }
-    final prev = _pts[_pts.length - 2];
-    final d = _haversine(prev.lat, prev.lng, p.lat, p.lng);
-    final gained = (p.elevation - prev.elevation);
-    if (gained > 0) _elevationGain += gained;
-    final pace = p.speedMps > 0.3 ? 1000 / (p.speedMps * 60) : 0.0;
-    
-    final calories = (state.elapsedMs / 60000 * 11).round();
-    state = state.copyWith(
-      state: AppEngineState.recording,
-      distanceM: state.distanceM + d,
-      paceMinPerKm: pace,
-      heartRate: p.heartRate,
-      cadence: p.cadence,
-      elevationGainM: _elevationGain,
-      calories: calories,
-      pointCount: _pts.length,
-    );
+
+    _pts.add(p);
+    _addDisplayPoint(p);
+
     // Throttled recovery snapshot (every 10 points keeps the file small).
     if (_pts.length % 10 == 0) {
       _pendingWrite = _writeRecovery();
