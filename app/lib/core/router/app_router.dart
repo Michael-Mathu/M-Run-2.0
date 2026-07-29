@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -305,20 +306,27 @@ class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
         if (!didPop) onAppBack(context);
       },
       child: Scaffold(
+        extendBody: true,
         body: GestureDetector(
           onHorizontalDragEnd: _onHorizontalDragEnd,
           behavior: HitTestBehavior.translucent,
           child: widget.shell,
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: widget.shell.currentIndex,
-          onDestinationSelected: (i) {
-            if (i != widget.shell.currentIndex) Haptics.selection();
-            widget.shell.goBranch(i);
-          },
-          height: 72,
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          destinations: [
+        bottomNavigationBar: ClipRRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+            child: NavigationBar(
+              backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
+              indicatorColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.8),
+              elevation: 0,
+              selectedIndex: widget.shell.currentIndex,
+              onDestinationSelected: (i) {
+                if (i != widget.shell.currentIndex) Haptics.selection();
+                widget.shell.goBranch(i);
+              },
+              height: 72,
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              destinations: [
             _destination(
               icon: const Icon(Icons.home_outlined),
               selectedIcon: const Icon(Icons.home_rounded),
@@ -344,7 +352,8 @@ class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
               selectedIcon: const Icon(Icons.person_rounded),
               label: L10n.tr('you', locale),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );

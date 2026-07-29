@@ -58,7 +58,16 @@ class MetricTile extends StatelessWidget {
       crossAxisAlignment:
           align == TextAlign.center ? CrossAxisAlignment.center : CrossAxisAlignment.start,
       children: [
-        Text(value, style: _valueStyle(context), textAlign: align),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+          child: Text(
+            value,
+            key: ValueKey(value),
+            style: _valueStyle(context),
+            textAlign: align,
+          ),
+        ),
         const SizedBox(height: AppTheme.s2),
         Text(label.toUpperCase(), style: _labelStyle(context), textAlign: align),
       ],

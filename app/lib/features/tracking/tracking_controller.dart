@@ -301,19 +301,21 @@ class TrackingModel extends Notifier<TrackingState> {
 
   void _onPoint(TrackPoint p) {
     final isMoving = p.speedMps > 0.3;
-    
-    // Track moving time: start timer if speed > 0.3 m/s
-    if (isMoving) {
-      _movingStart ??= DateTime.now();
-    } else if (_movingStart != null) {
-      _accumulatedMovingMs += DateTime.now().difference(_movingStart!).inMilliseconds;
-      _movingStart = null;
+
+    // ponytail: halt point recording when stationary or inaccurate to prevent distance inflation and jagged polylines.
+    // Ensure we drop wildly inaccurate points immediately, even the very first one.
+    if (!isMoving || p.accuracy > 20) {
+      if (_movingStart != null) {
+        _accumulatedMovingMs += DateTime.now().difference(_movingStart!).inMilliseconds;
+        _movingStart = null;
+      }
+      return;
     }
 
-    if (_pts.isNotEmpty) {
-      // ponytail: halt point recording when stationary or inaccurate to prevent distance inflation and jagged polylines.
-      if (!isMoving || p.accuracy > 20) return;
+    // Track moving time: start timer if speed > 0.3 m/s
+    _movingStart ??= DateTime.now();
 
+    if (_pts.isNotEmpty) {
       final prev = _pts.last;
       final d = _haversine(prev.lat, prev.lng, p.lat, p.lng);
       

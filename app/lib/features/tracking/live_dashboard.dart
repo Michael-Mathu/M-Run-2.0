@@ -609,7 +609,7 @@ class _StartButton extends ConsumerWidget {
     return Semantics(
       button: true,
       label: L10n.tr('start_run_control', locale),
-      child: GestureDetector(
+      child: _AnimatedBounceButton(
         onTap: onStart,
         child: Container(
           width: 80,
@@ -675,51 +675,43 @@ class _ControlBar extends ConsumerWidget {
           Semantics(
             button: true,
             label: L10n.tr('stop_run', locale),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: onStop,
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: const BoxDecoration(
-                    color: AppTheme.sos,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.stop_rounded, color: Colors.white, size: 24),
+            child: _AnimatedBounceButton(
+              onTap: onStop,
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: const BoxDecoration(
+                  color: AppTheme.sos,
+                  shape: BoxShape.circle,
                 ),
+                child: const Icon(Icons.stop_rounded, color: Colors.white, size: 24),
               ),
             ),
           ),
-// Main play/pause button
-           Semantics(
-             button: true,
-             label: isRecording ? L10n.tr('pause_run', locale) : L10n.tr('resume_run', locale),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: isRecording ? onPause : onResume,
-                child: Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.brandGradient,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.brand.withValues(alpha: 0.3),
-                        blurRadius: 16,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    isRecording ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    size: 36,
-                    color: Colors.white,
-                  ),
+          // Main play/pause button
+          Semantics(
+            button: true,
+            label: isRecording ? L10n.tr('pause_run', locale) : L10n.tr('resume_run', locale),
+            child: _AnimatedBounceButton(
+              onTap: isRecording ? onPause : onResume,
+              child: Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  gradient: AppTheme.brandGradient,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.brand.withValues(alpha: 0.3),
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  isRecording ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  size: 36,
+                  color: Colors.white,
                 ),
               ),
             ),
@@ -1034,6 +1026,37 @@ class _SosCountdownDialogState extends ConsumerState<_SosCountdownDialog> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AnimatedBounceButton extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+  const _AnimatedBounceButton({required this.child, required this.onTap});
+
+  @override
+  State<_AnimatedBounceButton> createState() => _AnimatedBounceButtonState();
+}
+
+class _AnimatedBounceButtonState extends State<_AnimatedBounceButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.92 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOutBack,
+        child: widget.child,
       ),
     );
   }
