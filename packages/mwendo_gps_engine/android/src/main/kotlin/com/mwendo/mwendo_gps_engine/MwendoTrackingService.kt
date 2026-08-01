@@ -95,6 +95,7 @@ class MwendoTrackingService : Service() {
         val request = LocationRequest.Builder(interval).apply {
             setPriority(Priority.PRIORITY_HIGH_ACCURACY)
             setWaitForAccurateLocation(false)
+            if (profile == "standard") setMinUpdateDistanceMeters(3f)
         }.build()
         
         requestLocationUpdatesWithRetry(request, locationCallback!!, 3, 250L)
@@ -168,16 +169,19 @@ class MwendoTrackingService : Service() {
     private fun processLocation(location: Location) {
         val speedMps = maxOf(0.0, location.speed.toDouble())
         val state = classifyState(speedMps)
+        
+        if (location.accuracy > 20f || location.accuracy == 0f) return
+        
         if (hasLast) {
             val d = FloatArray(1)
             Location.distanceBetween(lastLat, lastLng, location.latitude, location.longitude, d)
-            distanceM += d[0]
-            if (state == "run" || state == "walk") {
-                val gap = location.time - lastTime
-                // Out-of-order fixes or GPS clock corrections can yield negative
-                // or huge gaps; only count sane, positive deltas so paused time
-                // (and clock jitter) doesn't inflate moving time.
-                if (gap > 0 && gap < 60_000) movingTimeMs += gap
+            
+            if (speedMps >= 0.3 && d[0] >= 2.0) {
+                distanceM += d[0]
+                if (state == "run" || state == "walk") {
+                    val gap = location.time - lastTime
+                    if (gap > 0 && gap < 60_000) movingTimeMs += gap
+                }
             }
         }
         lastLat = location.latitude

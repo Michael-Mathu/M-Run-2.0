@@ -83,13 +83,6 @@ class _MwendoMapState extends State<MwendoMap> {
       _firstFixDone = false;
     }
     if (widget.points.length != old.points.length) {
-      if (_isLive && !_firstFixDone && widget.points.isNotEmpty) {
-        _firstFixDone = true;
-        _autoFollow = true;
-        _ctrl?.animateCamera(
-          CameraUpdate.newLatLngZoom(_toMlLatLng(widget.points.first), 16),
-        );
-      }
       _syncRoute();
     }
     if (widget.ghost != old.ghost ||
@@ -211,11 +204,9 @@ class _MwendoMapState extends State<MwendoMap> {
           iconHaloBlur: 4,
         ));
       } else {
-        await ctrl.updateSymbol(_ghostMarker!, SymbolOptions(
-          geometry: _toMlLatLng(ghostPos),
-        ));
         final pulse = 1.0 + 0.3 * math.sin(DateTime.now().millisecondsSinceEpoch / 300);
         await ctrl.updateSymbol(_ghostMarker!, SymbolOptions(
+          geometry: _toMlLatLng(ghostPos),
           iconSize: 1.2 * pulse,
         ));
       }
@@ -257,7 +248,7 @@ class _MwendoMapState extends State<MwendoMap> {
         : _toMlLatLng(kDefaultCenter);
 
     final map = MapLibreMap(
-      key: ValueKey('mwendo-map-${widget.locationEnabled}'),
+      key: const ValueKey('mwendo-map'),
       initialCameraPosition: CameraPosition(
         target: initialTarget,
         zoom: _isLive ? 12 : widget.zoom,

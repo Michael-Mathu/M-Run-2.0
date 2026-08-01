@@ -127,7 +127,7 @@ class TrackingModel extends Notifier<TrackingState> {
       state = state.copyWith(
         elapsedMs: total,
         movingTimeMs: movingMs,
-        calories: (total / 60000 * 11).round(),
+        calories: (movingMs / 60000 * 11).round(),
       );
     });
   }
@@ -304,7 +304,7 @@ class TrackingModel extends Notifier<TrackingState> {
 
     // ponytail: halt point recording when stationary or inaccurate to prevent distance inflation and jagged polylines.
     // Ensure we drop wildly inaccurate points immediately, even the very first one.
-    if (p.accuracy > 20) {
+    if (p.accuracy == 0 || p.accuracy > 20) {
       if (_movingStart != null) {
         _accumulatedMovingMs += DateTime.now().difference(_movingStart!).inMilliseconds;
         _movingStart = null;
@@ -340,11 +340,10 @@ class TrackingModel extends Notifier<TrackingState> {
       state = state.copyWith(
         state: AppEngineState.recording,
         distanceM: state.distanceM + d,
-        paceMinPerKm: 1000 / (p.speedMps * 60),
+        paceMinPerKm: p.speedMps > 0 ? 1000 / (p.speedMps * 60) : state.paceMinPerKm,
         heartRate: p.heartRate,
         cadence: p.cadence,
         elevationGainM: _elevationGain,
-        calories: (state.elapsedMs / 60000 * 11).round(),
         pointCount: _pts.length + 1,
       );
     } else {
@@ -354,7 +353,6 @@ class TrackingModel extends Notifier<TrackingState> {
         heartRate: p.heartRate,
         cadence: p.cadence,
         elevationGainM: 0,
-        calories: 0,
         pointCount: 1,
       );
     }
@@ -384,7 +382,7 @@ class TrackingModel extends Notifier<TrackingState> {
       _lastFilterTime = now;
       _hasSmooth = true;
     } else {
-      final dt = now.difference(_lastFilterTime!).inMilliseconds / 1000.0;
+      final dt = now.difference(_lastFilterTime!).inMilliseconds.clamp(0, 10000) / 1000.0;
       if (dt > 0) {
         final motionSigma = isMoving ? 5.0 : 0.5;
         final q = (motionSigma * dt) * (motionSigma * dt);
@@ -419,8 +417,8 @@ class TrackingModel extends Notifier<TrackingState> {
         }
       }
       
-      if (d < _cullMeters && !isMoving) return;
-      if (d < _cullMeters / 2) return;
+      final cullDist = isMoving ? _cullMeters / 2 : _cullMeters;
+      if (d < cullDist) return;
     }
     
     _displayPts.add(_makeSmoothedPoint(p));
@@ -447,7 +445,7 @@ class TrackingModel extends Notifier<TrackingState> {
       b.lat, b.lng,
       c.lat, c.lng,
     );
-    return angle > 45;
+    return angle > 25;
   }
 
   double _angleBetween(double lat1, double lng1, double lat2, double lng2, double lat3, double lng3) {
