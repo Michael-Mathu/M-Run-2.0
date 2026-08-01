@@ -304,7 +304,7 @@ class TrackingModel extends Notifier<TrackingState> {
 
     // ponytail: halt point recording when stationary or inaccurate to prevent distance inflation and jagged polylines.
     // Ensure we drop wildly inaccurate points immediately, even the very first one.
-    if (!isMoving || p.accuracy > 20) {
+    if (p.accuracy > 20) {
       if (_movingStart != null) {
         _accumulatedMovingMs += DateTime.now().difference(_movingStart!).inMilliseconds;
         _movingStart = null;
@@ -312,8 +312,20 @@ class TrackingModel extends Notifier<TrackingState> {
       return;
     }
 
+    if (!isMoving) {
+      if (_movingStart != null) {
+        _accumulatedMovingMs += DateTime.now().difference(_movingStart!).inMilliseconds;
+        _movingStart = null;
+      }
+      // We must accept the very first point even if stationary so the map can load the user's initial location.
+      // After that, we drop stationary points to prevent distance inflation and drift.
+      if (_pts.isNotEmpty) return;
+    }
+
     // Track moving time: start timer if speed > 0.3 m/s
-    _movingStart ??= DateTime.now();
+    if (isMoving) {
+      _movingStart ??= DateTime.now();
+    }
 
     if (_pts.isNotEmpty) {
       final prev = _pts.last;

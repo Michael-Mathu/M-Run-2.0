@@ -103,16 +103,7 @@ GoRouter makeRouter(Ref ref) {
               ),
             ],
           ),
-          // Tab 1: Track
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/run',
-                pageBuilder: (context, state) => _fadePage(state, const LiveDashboard()),
-              ),
-            ],
-          ),
-          // Tab 2: Explore
+          // Tab 1: Explore
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -125,6 +116,15 @@ GoRouter makeRouter(Ref ref) {
                   state,
                   RouteDetailPage(slug: state.pathParameters['slug']!),
                 ),
+              ),
+            ],
+          ),
+          // Tab 2: Track
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/run',
+                pageBuilder: (context, state) => _fadePage(state, const LiveDashboard()),
               ),
             ],
           ),
@@ -271,10 +271,10 @@ class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
 
   // Tabs that contain horizontal scrollable content should opt out of
   // shell-level swipe navigation to avoid gesture conflicts.
-  // Index 1: Track/Run (live map pans horizontally)
-  // Index 2: Explore (horizontal segment chips + list)
+  // Index 1: Explore (horizontal segment chips + list)
+  // Index 2: Track/Run (live map pans horizontally)
   // Index 3: Learn (horizontal course/lesson cards)
-  static const _swipeDisabledIndices = {1, 2, 3}; // Track/Run, Explore, Learn
+  static const _swipeDisabledIndices = {1, 2, 3}; // Explore, Track/Run, Learn
 
   void _onHorizontalDragEnd(DragEndDetails details) {
     if (_swipeDisabledIndices.contains(widget.shell.currentIndex)) return;
@@ -333,9 +333,9 @@ class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
               label: L10n.tr('home', locale),
             ),
             _destination(
-              icon: const Icon(Icons.directions_run_outlined),
-              selectedIcon: const Icon(Icons.directions_run_rounded),
-              label: L10n.tr('run', locale),
+              icon: const Icon(Icons.map_outlined),
+              selectedIcon: const Icon(Icons.map_rounded),
+              label: L10n.tr('explore_routes', locale),
             ),
             NavigationDestination(
               icon: _RunNavIcon(runTabVisible: runTabVisible),
@@ -358,7 +358,7 @@ class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
       ),
     ),
   );
-  }
+}
 }
 
 /// Run tab icon. When not recording it emits a soft pulsing glow (attract

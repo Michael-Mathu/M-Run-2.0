@@ -312,7 +312,7 @@ children: [
           // Control buttons - positioned differently based on state
           if (showStart)
             Positioned(
-              bottom: MediaQuery.of(context).padding.bottom + AppTheme.s32,
+              bottom: MediaQuery.of(context).padding.bottom + 72 + AppTheme.s32,
               left: 0,
               right: 0,
               child: Center(
@@ -323,7 +323,7 @@ children: [
             )
           else
             Positioned(
-              bottom: MediaQuery.of(context).padding.bottom + AppTheme.s16,
+              bottom: MediaQuery.of(context).padding.bottom + 72 + AppTheme.s16,
               left: 0,
               right: 0,
               child: _ControlBar(
