@@ -356,7 +356,8 @@ class _ScaffoldWithNavBarState extends ConsumerState<ScaffoldWithNavBar> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }
 
