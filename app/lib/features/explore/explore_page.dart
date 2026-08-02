@@ -43,7 +43,7 @@ class ExplorePage extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: AppTheme.s16),
                 sliver: _buildContent(data, locale),
               ),
-              const SliverPadding(padding: EdgeInsets.only(bottom: AppTheme.s32)),
+              const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
             ],
           ),
         ),

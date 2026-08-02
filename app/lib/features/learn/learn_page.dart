@@ -113,6 +113,7 @@ class LearnPage extends ConsumerWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 100),
                 ],
               ),
             ),

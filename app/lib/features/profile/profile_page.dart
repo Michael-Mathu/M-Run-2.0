@@ -278,7 +278,7 @@ class _YouPageState extends ConsumerState<YouPage> {
                         title: L10n.tr('export_data', locale),
                         onTap: () => _exportData(context, ref, locale),
                       ),
-                      const SizedBox(height: AppTheme.s24),
+                      const SizedBox(height: 100),
                     ]),
                   ),
                 ),

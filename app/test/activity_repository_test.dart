@@ -5,17 +5,43 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:mwendo_app/data/database/app_database.dart';
 import 'package:mwendo_app/data/models/run_record.dart';
 import 'package:mwendo_app/data/repositories/activity_repository.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
   late Directory tempDir;
   late File tempFile;
   late ActivityRepository repository;
+  late Directory dbDir;
+
+  setUpAll(() async {
+    dbDir = await Directory.systemTemp.createTemp('mwendo_db_test');
+    TestWidgetsFlutterBinding.ensureInitialized();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (MethodCall methodCall) async {
+        return dbDir.path;
+      },
+    );
+  });
+
+  tearDownAll(() async {
+    final db = AppDatabase();
+    await db.close();
+    if (await dbDir.exists()) {
+      await dbDir.delete(recursive: true);
+    }
+  });
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('mwendo_test');
     tempFile = File(p.join(tempDir.path, 'activities.json'));
     final db = AppDatabase();
+    try {
+      await db.customStatement('DELETE FROM activity_points;');
+      await db.customStatement('DELETE FROM activities;');
+    } catch (_) {}
     repository = ActivityRepository(db, tempFile);
   });
 

@@ -110,13 +110,6 @@ GoRouter makeRouter(Ref ref) {
                 path: '/explore',
                 pageBuilder: (context, state) => _fadePage(state, const ExplorePage()),
               ),
-              GoRoute(
-                path: '/explore/:slug',
-                pageBuilder: (context, state) => _slidePage(
-                  state,
-                  RouteDetailPage(slug: state.pathParameters['slug']!),
-                ),
-              ),
             ],
           ),
           // Tab 2: Track
@@ -135,34 +128,6 @@ GoRouter makeRouter(Ref ref) {
                 path: '/learn',
                 pageBuilder: (context, state) => _fadePage(state, const LearnPage()),
               ),
-              GoRoute(
-                path: '/learn/course/:slug',
-                pageBuilder: (context, state) => _slidePage(
-                  state,
-                  CourseDetailPage(slug: state.pathParameters['slug']!),
-                ),
-              ),
-              GoRoute(
-                path: '/learn/course/:slug/lesson/:index',
-                pageBuilder: (context, state) => _slidePage(
-                  state,
-                  LessonPage(
-                    slug: state.pathParameters['slug']!,
-                    index: int.parse(state.pathParameters['index']!),
-                  ),
-                ),
-              ),
-              GoRoute(
-                path: '/learn/legends',
-                pageBuilder: (context, state) => _slidePage(state, const LegendsPage()),
-              ),
-              GoRoute(
-                path: '/learn/legends/:slug',
-                pageBuilder: (context, state) => _slidePage(
-                  state,
-                  LegendDetailPage(slug: state.pathParameters['slug']!),
-                ),
-              ),
             ],
           ),
           // Tab 4: You
@@ -177,6 +142,41 @@ GoRouter makeRouter(Ref ref) {
         ],
       ),
       // Standalone routes (outside tabs)
+      GoRoute(
+        path: '/explore/:slug',
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          RouteDetailPage(slug: state.pathParameters['slug']!),
+        ),
+      ),
+      GoRoute(
+        path: '/learn/course/:slug',
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          CourseDetailPage(slug: state.pathParameters['slug']!),
+        ),
+      ),
+      GoRoute(
+        path: '/learn/course/:slug/lesson/:index',
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          LessonPage(
+            slug: state.pathParameters['slug']!,
+            index: int.parse(state.pathParameters['index']!),
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/learn/legends',
+        pageBuilder: (context, state) => _slidePage(state, const LegendsPage()),
+      ),
+      GoRoute(
+        path: '/learn/legends/:slug',
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          LegendDetailPage(slug: state.pathParameters['slug']!),
+        ),
+      ),
       GoRoute(
         path: '/beat',
         pageBuilder: (context, state) => _slidePage(state, const BeatLegendsPage()),
