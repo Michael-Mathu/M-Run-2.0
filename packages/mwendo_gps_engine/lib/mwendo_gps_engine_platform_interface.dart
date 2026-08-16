@@ -15,6 +15,11 @@ class TrackPoint {
   final int? cadence;
   final int accuracy;
   final String state;
+  final double? hdop;
+  final int? satelliteCount;
+  final String? provider;
+  final bool isMocked;
+  final String fixType;
 
   TrackPoint({
     required this.lat,
@@ -26,6 +31,11 @@ class TrackPoint {
     this.cadence,
     required this.accuracy,
     required this.state,
+    this.hdop,
+    this.satelliteCount,
+    this.provider,
+    this.isMocked = false,
+    this.fixType = 'unknown',
   });
 }
 

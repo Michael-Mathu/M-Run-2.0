@@ -37,6 +37,14 @@ class ActivityPoints extends Table {
   RealColumn get elevation => real()();
   RealColumn get pace => real()();
   DateTimeColumn get timestamp => dateTime()();
+  
+  IntColumn get accuracy => integer().nullable()();
+  RealColumn get hdop => real().nullable()();
+  IntColumn get satelliteCount => integer().nullable()();
+  TextColumn get provider => text().nullable()();
+  BoolColumn get isMocked => boolean().withDefault(const Constant(false))();
+  TextColumn get fixType => text().nullable()();
+  TextColumn get state => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {activityId, pointIndex};

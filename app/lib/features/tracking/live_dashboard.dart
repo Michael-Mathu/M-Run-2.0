@@ -129,11 +129,12 @@ class _LiveDashboardState extends ConsumerState<LiveDashboard> {
                         // map never holds a mutable reference that _onPoint
                         // mutates concurrently (fixes Bug #6).
                         points: [
-                          for (final p
+                          for (final seg
                               in ref
                                   .read(trackingModelProvider.notifier)
-                                  .displayPoints)
-                            latlong.LatLng(p.lat, p.lng),
+                                  .displaySegments)
+                            for (final p in seg.points)
+                              latlong.LatLng(p.lat, p.lng),
                         ],
                         mode: MapMode.live,
                         locationEnabled: _hasLocationPermission,

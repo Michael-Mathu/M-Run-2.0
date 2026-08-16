@@ -1,39 +1,37 @@
-import 'dart:io';
-
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:maplibre_gl/maplibre_gl.dart' as maplibre;
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
+import 'package:gps_pipeline/gps_pipeline.dart';
 
+import 'connection/connection.dart' as impl;
 import 'tables.dart';
 import '../models/run_record.dart';
 
 part 'app_database.g.dart';
 
-LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final dbFile = File(p.join(dir.path, 'mwendo.db'));
-    return NativeDatabase(dbFile);
-  });
-}
-
 @DriftDatabase(tables: [Users, Activities, ActivityPoints])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase._() : super(_openConnection());
+  AppDatabase._() : super(impl.connect());
   static AppDatabase? _instance;
   factory AppDatabase() => _instance ??= AppDatabase._();
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
           await m.createAll();
         },
-        onUpgrade: (Migrator m, int from, int to) async {},
+        onUpgrade: (Migrator m, int from, int to) async {
+          if (from < 2) {
+            await m.addColumn(activityPoints, activityPoints.accuracy);
+            await m.addColumn(activityPoints, activityPoints.hdop);
+            await m.addColumn(activityPoints, activityPoints.satelliteCount);
+            await m.addColumn(activityPoints, activityPoints.provider);
+            await m.addColumn(activityPoints, activityPoints.isMocked);
+            await m.addColumn(activityPoints, activityPoints.fixType);
+            await m.addColumn(activityPoints, activityPoints.state);
+          }
+        },
       );
 
   Future<List<RunRecord>> getAllRuns() async {
@@ -67,10 +65,19 @@ class AppDatabase extends _$AppDatabase {
       elevationGainM: activity.elevationGainM,
       avgHeartRate: activity.avgHeartRate,
       avgCadence: activity.avgCadence,
-      route: pts.map((pt) => maplibre.LatLng(pt.lat, pt.lng)).toList(),
-      elevation: pts.map((pt) => pt.elevation).toList(),
-      pace: pts.map((pt) => pt.pace).toList(),
-      times: pts.map((pt) => pt.timestamp).toList(),
+      rawFixes: pts.map((pt) => RawFix(
+        lat: pt.lat,
+        lng: pt.lng,
+        elevation: pt.elevation,
+        timestamp: pt.timestamp,
+        speedMps: pt.pace > 0 ? 1000 / (pt.pace * 60) : 0.0,
+        accuracy: (pt.accuracy ?? 10.0).toInt(),
+        hdop: pt.hdop,
+        satelliteCount: pt.satelliteCount,
+        provider: pt.provider,
+        isMocked: pt.isMocked,
+        fixType: pt.fixType ?? 'unknown',
+      )).toList(),
     );
   }
 
@@ -92,16 +99,22 @@ class AppDatabase extends _$AppDatabase {
     await (delete(activityPoints)..where((pt) => pt.activityId.equals(record.id))).go();
 
     final pointCompanions = <ActivityPointsCompanion>[];
-    for (int i = 0; i < record.route.length; i++) {
-      final latLng = record.route[i];
+    for (int i = 0; i < record.rawFixes.length; i++) {
+      final fix = record.rawFixes[i];
       pointCompanions.add(ActivityPointsCompanion(
         activityId: Value(record.id),
         pointIndex: Value(i),
-        lat: Value(latLng.latitude),
-        lng: Value(latLng.longitude),
-        elevation: Value(record.elevation.length > i ? record.elevation[i] : 0),
-        pace: Value(record.pace.length > i ? record.pace[i] : 0),
-        timestamp: Value(record.times.length > i ? record.times[i] : DateTime.now()),
+        lat: Value(fix.lat),
+        lng: Value(fix.lng),
+        elevation: Value(fix.elevation),
+        pace: Value(fix.speedMps > 0.3 ? 1000 / (fix.speedMps * 60) : 0.0),
+        timestamp: Value(fix.timestamp),
+        accuracy: Value(fix.accuracy.toInt()),
+        hdop: Value(fix.hdop),
+        satelliteCount: Value(fix.satelliteCount),
+        provider: Value(fix.provider),
+        isMocked: Value(fix.isMocked),
+        fixType: Value(fix.fixType),
       ));
     }
     await batch((b) => b.insertAll(activityPoints, pointCompanions));

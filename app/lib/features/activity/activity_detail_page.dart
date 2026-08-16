@@ -53,6 +53,11 @@ class ActivityDetailPage extends ConsumerWidget {
         elevation: 0,
         actions: [
           IconButton(
+            icon: const Icon(Icons.analytics_outlined),
+            tooltip: 'Route Analysis',
+            onPressed: () => context.push('/route-analysis/${run.id}'),
+          ),
+          IconButton(
             icon: const Icon(Icons.share_rounded),
             tooltip: L10n.tr('share', ref.read(localeProvider)),
             onPressed: () => SharePlus.instance.share(ShareParams(

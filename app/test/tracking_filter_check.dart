@@ -2,9 +2,6 @@
 // "non-trivial logic leaves ONE runnable check behind... no frameworks, no fixtures"
 // This file executes the tracking logic with simulated GPS pings and asserts the expected behavior.
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mwendo_gps_engine/mwendo_gps_engine.dart';
-
 // Since we cannot run the actual tracking_controller here without mocking the engine, 
 // we extract the pure logic of the filter to test it directly.
 // (Alternatively, we can instantiate TrackingModel if we mock the engine, but plain asserts are cleaner).

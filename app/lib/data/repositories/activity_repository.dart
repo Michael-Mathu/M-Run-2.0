@@ -10,7 +10,7 @@ import '../models/run_record.dart';
 
 class ActivityRepository {
   final AppDatabase _db;
-  final File _jsonFile;
+  final File? _jsonFile;
 
   ActivityRepository(this._db, this._jsonFile);
 
@@ -53,8 +53,9 @@ class ActivityRepository {
 
   Future<List<RunRecord>> _migrateFromJson() async {
     try {
-      if (!await _jsonFile.exists()) return [];
-      final raw = await _jsonFile.readAsString();
+      final file = _jsonFile;
+      if (file == null || !await file.exists()) return [];
+      final raw = await file.readAsString();
       final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
       final runs = list.map(RunRecord.fromJson).toList();
       
@@ -64,8 +65,8 @@ class ActivityRepository {
         } catch (_) {}
       }
       
-      final backup = File('${_jsonFile.path}.bak');
-      await _jsonFile.rename(backup.path);
+      final backup = File('${file.path}.bak');
+      await file.rename(backup.path);
       
       return runs;
     } catch (_) {
@@ -78,6 +79,9 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) => AppDatabase());
 
 final activityRepositoryProvider = FutureProvider<ActivityRepository>((ref) async {
   final db = ref.watch(appDatabaseProvider);
+  if (kIsWeb) {
+    return ActivityRepository(db, null);
+  }
   final dir = await getApplicationDocumentsDirectory();
   final jsonFile = File(p.join(dir.path, 'activities.json'));
   return ActivityRepository(db, jsonFile);

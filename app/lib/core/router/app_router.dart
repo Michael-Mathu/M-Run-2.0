@@ -26,6 +26,7 @@ import 'package:mwendo_app/features/profile/profile_page.dart' show YouPage;
 import 'package:mwendo_app/features/tracking/live_dashboard.dart';
 import 'package:mwendo_app/features/tracking/tracking_controller.dart';
 import 'package:mwendo_app/core/utils/haptics.dart';
+import 'package:mwendo_app/features/tracking/route_analysis_screen.dart';
 
 /// Slide-up + fade transition for pushed/drilled-down routes (detail pages,
 /// full-screen flows): 6% upward slide, 200ms, easeOutCubic.
@@ -197,6 +198,13 @@ GoRouter makeRouter(Ref ref) {
         pageBuilder: (context, state) => _slidePage(
           state,
           ActivityDetailPage(id: state.pathParameters['id']!),
+        ),
+      ),
+      GoRoute(
+        path: '/route-analysis/:id',
+        pageBuilder: (context, state) => _slidePage(
+          state,
+          RouteAnalysisScreen(runId: state.pathParameters['id']!),
         ),
       ),
       GoRoute(

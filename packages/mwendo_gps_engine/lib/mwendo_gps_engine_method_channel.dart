@@ -39,6 +39,11 @@ class MethodChannelMwendoGpsEngine extends MwendoGpsEnginePlatform {
       cadence: data['cadence'] as int?,
       accuracy: (data['accuracy'] as num?)?.toInt() ?? 0,
       state: data['state'] as String? ?? 'idle',
+      hdop: (data['hdop'] as num?)?.toDouble(),
+      satelliteCount: data['satellite_count'] as int?,
+      provider: data['provider'] as String?,
+      isMocked: data['is_mocked'] as bool? ?? false,
+      fixType: data['fix_type'] as String? ?? 'unknown',
     ));
   }
 

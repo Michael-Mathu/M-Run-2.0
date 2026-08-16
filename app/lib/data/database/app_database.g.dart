@@ -1161,6 +1161,83 @@ class $ActivityPointsTable extends ActivityPoints
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _accuracyMeta = const VerificationMeta(
+    'accuracy',
+  );
+  @override
+  late final GeneratedColumn<int> accuracy = GeneratedColumn<int>(
+    'accuracy',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _hdopMeta = const VerificationMeta('hdop');
+  @override
+  late final GeneratedColumn<double> hdop = GeneratedColumn<double>(
+    'hdop',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _satelliteCountMeta = const VerificationMeta(
+    'satelliteCount',
+  );
+  @override
+  late final GeneratedColumn<int> satelliteCount = GeneratedColumn<int>(
+    'satellite_count',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _providerMeta = const VerificationMeta(
+    'provider',
+  );
+  @override
+  late final GeneratedColumn<String> provider = GeneratedColumn<String>(
+    'provider',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isMockedMeta = const VerificationMeta(
+    'isMocked',
+  );
+  @override
+  late final GeneratedColumn<bool> isMocked = GeneratedColumn<bool>(
+    'is_mocked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_mocked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _fixTypeMeta = const VerificationMeta(
+    'fixType',
+  );
+  @override
+  late final GeneratedColumn<String> fixType = GeneratedColumn<String>(
+    'fix_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<String> state = GeneratedColumn<String>(
+    'state',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     activityId,
@@ -1170,6 +1247,13 @@ class $ActivityPointsTable extends ActivityPoints
     elevation,
     pace,
     timestamp,
+    accuracy,
+    hdop,
+    satelliteCount,
+    provider,
+    isMocked,
+    fixType,
+    state,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1239,6 +1323,51 @@ class $ActivityPointsTable extends ActivityPoints
     } else if (isInserting) {
       context.missing(_timestampMeta);
     }
+    if (data.containsKey('accuracy')) {
+      context.handle(
+        _accuracyMeta,
+        accuracy.isAcceptableOrUnknown(data['accuracy']!, _accuracyMeta),
+      );
+    }
+    if (data.containsKey('hdop')) {
+      context.handle(
+        _hdopMeta,
+        hdop.isAcceptableOrUnknown(data['hdop']!, _hdopMeta),
+      );
+    }
+    if (data.containsKey('satellite_count')) {
+      context.handle(
+        _satelliteCountMeta,
+        satelliteCount.isAcceptableOrUnknown(
+          data['satellite_count']!,
+          _satelliteCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('provider')) {
+      context.handle(
+        _providerMeta,
+        provider.isAcceptableOrUnknown(data['provider']!, _providerMeta),
+      );
+    }
+    if (data.containsKey('is_mocked')) {
+      context.handle(
+        _isMockedMeta,
+        isMocked.isAcceptableOrUnknown(data['is_mocked']!, _isMockedMeta),
+      );
+    }
+    if (data.containsKey('fix_type')) {
+      context.handle(
+        _fixTypeMeta,
+        fixType.isAcceptableOrUnknown(data['fix_type']!, _fixTypeMeta),
+      );
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    }
     return context;
   }
 
@@ -1276,6 +1405,34 @@ class $ActivityPointsTable extends ActivityPoints
         DriftSqlType.dateTime,
         data['${effectivePrefix}timestamp'],
       )!,
+      accuracy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}accuracy'],
+      ),
+      hdop: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}hdop'],
+      ),
+      satelliteCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}satellite_count'],
+      ),
+      provider: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}provider'],
+      ),
+      isMocked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_mocked'],
+      )!,
+      fixType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}fix_type'],
+      ),
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}state'],
+      ),
     );
   }
 
@@ -1293,6 +1450,13 @@ class ActivityPoint extends DataClass implements Insertable<ActivityPoint> {
   final double elevation;
   final double pace;
   final DateTime timestamp;
+  final int? accuracy;
+  final double? hdop;
+  final int? satelliteCount;
+  final String? provider;
+  final bool isMocked;
+  final String? fixType;
+  final String? state;
   const ActivityPoint({
     required this.activityId,
     required this.pointIndex,
@@ -1301,6 +1465,13 @@ class ActivityPoint extends DataClass implements Insertable<ActivityPoint> {
     required this.elevation,
     required this.pace,
     required this.timestamp,
+    this.accuracy,
+    this.hdop,
+    this.satelliteCount,
+    this.provider,
+    required this.isMocked,
+    this.fixType,
+    this.state,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1312,6 +1483,25 @@ class ActivityPoint extends DataClass implements Insertable<ActivityPoint> {
     map['elevation'] = Variable<double>(elevation);
     map['pace'] = Variable<double>(pace);
     map['timestamp'] = Variable<DateTime>(timestamp);
+    if (!nullToAbsent || accuracy != null) {
+      map['accuracy'] = Variable<int>(accuracy);
+    }
+    if (!nullToAbsent || hdop != null) {
+      map['hdop'] = Variable<double>(hdop);
+    }
+    if (!nullToAbsent || satelliteCount != null) {
+      map['satellite_count'] = Variable<int>(satelliteCount);
+    }
+    if (!nullToAbsent || provider != null) {
+      map['provider'] = Variable<String>(provider);
+    }
+    map['is_mocked'] = Variable<bool>(isMocked);
+    if (!nullToAbsent || fixType != null) {
+      map['fix_type'] = Variable<String>(fixType);
+    }
+    if (!nullToAbsent || state != null) {
+      map['state'] = Variable<String>(state);
+    }
     return map;
   }
 
@@ -1324,6 +1514,23 @@ class ActivityPoint extends DataClass implements Insertable<ActivityPoint> {
       elevation: Value(elevation),
       pace: Value(pace),
       timestamp: Value(timestamp),
+      accuracy: accuracy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(accuracy),
+      hdop: hdop == null && nullToAbsent ? const Value.absent() : Value(hdop),
+      satelliteCount: satelliteCount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(satelliteCount),
+      provider: provider == null && nullToAbsent
+          ? const Value.absent()
+          : Value(provider),
+      isMocked: Value(isMocked),
+      fixType: fixType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fixType),
+      state: state == null && nullToAbsent
+          ? const Value.absent()
+          : Value(state),
     );
   }
 
@@ -1340,6 +1547,13 @@ class ActivityPoint extends DataClass implements Insertable<ActivityPoint> {
       elevation: serializer.fromJson<double>(json['elevation']),
       pace: serializer.fromJson<double>(json['pace']),
       timestamp: serializer.fromJson<DateTime>(json['timestamp']),
+      accuracy: serializer.fromJson<int?>(json['accuracy']),
+      hdop: serializer.fromJson<double?>(json['hdop']),
+      satelliteCount: serializer.fromJson<int?>(json['satelliteCount']),
+      provider: serializer.fromJson<String?>(json['provider']),
+      isMocked: serializer.fromJson<bool>(json['isMocked']),
+      fixType: serializer.fromJson<String?>(json['fixType']),
+      state: serializer.fromJson<String?>(json['state']),
     );
   }
   @override
@@ -1353,6 +1567,13 @@ class ActivityPoint extends DataClass implements Insertable<ActivityPoint> {
       'elevation': serializer.toJson<double>(elevation),
       'pace': serializer.toJson<double>(pace),
       'timestamp': serializer.toJson<DateTime>(timestamp),
+      'accuracy': serializer.toJson<int?>(accuracy),
+      'hdop': serializer.toJson<double?>(hdop),
+      'satelliteCount': serializer.toJson<int?>(satelliteCount),
+      'provider': serializer.toJson<String?>(provider),
+      'isMocked': serializer.toJson<bool>(isMocked),
+      'fixType': serializer.toJson<String?>(fixType),
+      'state': serializer.toJson<String?>(state),
     };
   }
 
@@ -1364,6 +1585,13 @@ class ActivityPoint extends DataClass implements Insertable<ActivityPoint> {
     double? elevation,
     double? pace,
     DateTime? timestamp,
+    Value<int?> accuracy = const Value.absent(),
+    Value<double?> hdop = const Value.absent(),
+    Value<int?> satelliteCount = const Value.absent(),
+    Value<String?> provider = const Value.absent(),
+    bool? isMocked,
+    Value<String?> fixType = const Value.absent(),
+    Value<String?> state = const Value.absent(),
   }) => ActivityPoint(
     activityId: activityId ?? this.activityId,
     pointIndex: pointIndex ?? this.pointIndex,
@@ -1372,6 +1600,15 @@ class ActivityPoint extends DataClass implements Insertable<ActivityPoint> {
     elevation: elevation ?? this.elevation,
     pace: pace ?? this.pace,
     timestamp: timestamp ?? this.timestamp,
+    accuracy: accuracy.present ? accuracy.value : this.accuracy,
+    hdop: hdop.present ? hdop.value : this.hdop,
+    satelliteCount: satelliteCount.present
+        ? satelliteCount.value
+        : this.satelliteCount,
+    provider: provider.present ? provider.value : this.provider,
+    isMocked: isMocked ?? this.isMocked,
+    fixType: fixType.present ? fixType.value : this.fixType,
+    state: state.present ? state.value : this.state,
   );
   ActivityPoint copyWithCompanion(ActivityPointsCompanion data) {
     return ActivityPoint(
@@ -1386,6 +1623,15 @@ class ActivityPoint extends DataClass implements Insertable<ActivityPoint> {
       elevation: data.elevation.present ? data.elevation.value : this.elevation,
       pace: data.pace.present ? data.pace.value : this.pace,
       timestamp: data.timestamp.present ? data.timestamp.value : this.timestamp,
+      accuracy: data.accuracy.present ? data.accuracy.value : this.accuracy,
+      hdop: data.hdop.present ? data.hdop.value : this.hdop,
+      satelliteCount: data.satelliteCount.present
+          ? data.satelliteCount.value
+          : this.satelliteCount,
+      provider: data.provider.present ? data.provider.value : this.provider,
+      isMocked: data.isMocked.present ? data.isMocked.value : this.isMocked,
+      fixType: data.fixType.present ? data.fixType.value : this.fixType,
+      state: data.state.present ? data.state.value : this.state,
     );
   }
 
@@ -1398,14 +1644,35 @@ class ActivityPoint extends DataClass implements Insertable<ActivityPoint> {
           ..write('lng: $lng, ')
           ..write('elevation: $elevation, ')
           ..write('pace: $pace, ')
-          ..write('timestamp: $timestamp')
+          ..write('timestamp: $timestamp, ')
+          ..write('accuracy: $accuracy, ')
+          ..write('hdop: $hdop, ')
+          ..write('satelliteCount: $satelliteCount, ')
+          ..write('provider: $provider, ')
+          ..write('isMocked: $isMocked, ')
+          ..write('fixType: $fixType, ')
+          ..write('state: $state')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(activityId, pointIndex, lat, lng, elevation, pace, timestamp);
+  int get hashCode => Object.hash(
+    activityId,
+    pointIndex,
+    lat,
+    lng,
+    elevation,
+    pace,
+    timestamp,
+    accuracy,
+    hdop,
+    satelliteCount,
+    provider,
+    isMocked,
+    fixType,
+    state,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1416,7 +1683,14 @@ class ActivityPoint extends DataClass implements Insertable<ActivityPoint> {
           other.lng == this.lng &&
           other.elevation == this.elevation &&
           other.pace == this.pace &&
-          other.timestamp == this.timestamp);
+          other.timestamp == this.timestamp &&
+          other.accuracy == this.accuracy &&
+          other.hdop == this.hdop &&
+          other.satelliteCount == this.satelliteCount &&
+          other.provider == this.provider &&
+          other.isMocked == this.isMocked &&
+          other.fixType == this.fixType &&
+          other.state == this.state);
 }
 
 class ActivityPointsCompanion extends UpdateCompanion<ActivityPoint> {
@@ -1427,6 +1701,13 @@ class ActivityPointsCompanion extends UpdateCompanion<ActivityPoint> {
   final Value<double> elevation;
   final Value<double> pace;
   final Value<DateTime> timestamp;
+  final Value<int?> accuracy;
+  final Value<double?> hdop;
+  final Value<int?> satelliteCount;
+  final Value<String?> provider;
+  final Value<bool> isMocked;
+  final Value<String?> fixType;
+  final Value<String?> state;
   final Value<int> rowid;
   const ActivityPointsCompanion({
     this.activityId = const Value.absent(),
@@ -1436,6 +1717,13 @@ class ActivityPointsCompanion extends UpdateCompanion<ActivityPoint> {
     this.elevation = const Value.absent(),
     this.pace = const Value.absent(),
     this.timestamp = const Value.absent(),
+    this.accuracy = const Value.absent(),
+    this.hdop = const Value.absent(),
+    this.satelliteCount = const Value.absent(),
+    this.provider = const Value.absent(),
+    this.isMocked = const Value.absent(),
+    this.fixType = const Value.absent(),
+    this.state = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ActivityPointsCompanion.insert({
@@ -1446,6 +1734,13 @@ class ActivityPointsCompanion extends UpdateCompanion<ActivityPoint> {
     required double elevation,
     required double pace,
     required DateTime timestamp,
+    this.accuracy = const Value.absent(),
+    this.hdop = const Value.absent(),
+    this.satelliteCount = const Value.absent(),
+    this.provider = const Value.absent(),
+    this.isMocked = const Value.absent(),
+    this.fixType = const Value.absent(),
+    this.state = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : activityId = Value(activityId),
        pointIndex = Value(pointIndex),
@@ -1462,6 +1757,13 @@ class ActivityPointsCompanion extends UpdateCompanion<ActivityPoint> {
     Expression<double>? elevation,
     Expression<double>? pace,
     Expression<DateTime>? timestamp,
+    Expression<int>? accuracy,
+    Expression<double>? hdop,
+    Expression<int>? satelliteCount,
+    Expression<String>? provider,
+    Expression<bool>? isMocked,
+    Expression<String>? fixType,
+    Expression<String>? state,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1472,6 +1774,13 @@ class ActivityPointsCompanion extends UpdateCompanion<ActivityPoint> {
       if (elevation != null) 'elevation': elevation,
       if (pace != null) 'pace': pace,
       if (timestamp != null) 'timestamp': timestamp,
+      if (accuracy != null) 'accuracy': accuracy,
+      if (hdop != null) 'hdop': hdop,
+      if (satelliteCount != null) 'satellite_count': satelliteCount,
+      if (provider != null) 'provider': provider,
+      if (isMocked != null) 'is_mocked': isMocked,
+      if (fixType != null) 'fix_type': fixType,
+      if (state != null) 'state': state,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1484,6 +1793,13 @@ class ActivityPointsCompanion extends UpdateCompanion<ActivityPoint> {
     Value<double>? elevation,
     Value<double>? pace,
     Value<DateTime>? timestamp,
+    Value<int?>? accuracy,
+    Value<double?>? hdop,
+    Value<int?>? satelliteCount,
+    Value<String?>? provider,
+    Value<bool>? isMocked,
+    Value<String?>? fixType,
+    Value<String?>? state,
     Value<int>? rowid,
   }) {
     return ActivityPointsCompanion(
@@ -1494,6 +1810,13 @@ class ActivityPointsCompanion extends UpdateCompanion<ActivityPoint> {
       elevation: elevation ?? this.elevation,
       pace: pace ?? this.pace,
       timestamp: timestamp ?? this.timestamp,
+      accuracy: accuracy ?? this.accuracy,
+      hdop: hdop ?? this.hdop,
+      satelliteCount: satelliteCount ?? this.satelliteCount,
+      provider: provider ?? this.provider,
+      isMocked: isMocked ?? this.isMocked,
+      fixType: fixType ?? this.fixType,
+      state: state ?? this.state,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1522,6 +1845,27 @@ class ActivityPointsCompanion extends UpdateCompanion<ActivityPoint> {
     if (timestamp.present) {
       map['timestamp'] = Variable<DateTime>(timestamp.value);
     }
+    if (accuracy.present) {
+      map['accuracy'] = Variable<int>(accuracy.value);
+    }
+    if (hdop.present) {
+      map['hdop'] = Variable<double>(hdop.value);
+    }
+    if (satelliteCount.present) {
+      map['satellite_count'] = Variable<int>(satelliteCount.value);
+    }
+    if (provider.present) {
+      map['provider'] = Variable<String>(provider.value);
+    }
+    if (isMocked.present) {
+      map['is_mocked'] = Variable<bool>(isMocked.value);
+    }
+    if (fixType.present) {
+      map['fix_type'] = Variable<String>(fixType.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<String>(state.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1538,6 +1882,13 @@ class ActivityPointsCompanion extends UpdateCompanion<ActivityPoint> {
           ..write('elevation: $elevation, ')
           ..write('pace: $pace, ')
           ..write('timestamp: $timestamp, ')
+          ..write('accuracy: $accuracy, ')
+          ..write('hdop: $hdop, ')
+          ..write('satelliteCount: $satelliteCount, ')
+          ..write('provider: $provider, ')
+          ..write('isMocked: $isMocked, ')
+          ..write('fixType: $fixType, ')
+          ..write('state: $state, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2104,6 +2455,13 @@ typedef $$ActivityPointsTableCreateCompanionBuilder =
       required double elevation,
       required double pace,
       required DateTime timestamp,
+      Value<int?> accuracy,
+      Value<double?> hdop,
+      Value<int?> satelliteCount,
+      Value<String?> provider,
+      Value<bool> isMocked,
+      Value<String?> fixType,
+      Value<String?> state,
       Value<int> rowid,
     });
 typedef $$ActivityPointsTableUpdateCompanionBuilder =
@@ -2115,6 +2473,13 @@ typedef $$ActivityPointsTableUpdateCompanionBuilder =
       Value<double> elevation,
       Value<double> pace,
       Value<DateTime> timestamp,
+      Value<int?> accuracy,
+      Value<double?> hdop,
+      Value<int?> satelliteCount,
+      Value<String?> provider,
+      Value<bool> isMocked,
+      Value<String?> fixType,
+      Value<String?> state,
       Value<int> rowid,
     });
 
@@ -2159,6 +2524,41 @@ class $$ActivityPointsTableFilterComposer
 
   ColumnFilters<DateTime> get timestamp => $composableBuilder(
     column: $table.timestamp,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get accuracy => $composableBuilder(
+    column: $table.accuracy,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get hdop => $composableBuilder(
+    column: $table.hdop,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get satelliteCount => $composableBuilder(
+    column: $table.satelliteCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get provider => $composableBuilder(
+    column: $table.provider,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isMocked => $composableBuilder(
+    column: $table.isMocked,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fixType => $composableBuilder(
+    column: $table.fixType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get state => $composableBuilder(
+    column: $table.state,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2206,6 +2606,41 @@ class $$ActivityPointsTableOrderingComposer
     column: $table.timestamp,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get accuracy => $composableBuilder(
+    column: $table.accuracy,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get hdop => $composableBuilder(
+    column: $table.hdop,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get satelliteCount => $composableBuilder(
+    column: $table.satelliteCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get provider => $composableBuilder(
+    column: $table.provider,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isMocked => $composableBuilder(
+    column: $table.isMocked,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fixType => $composableBuilder(
+    column: $table.fixType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ActivityPointsTableAnnotationComposer
@@ -2241,6 +2676,29 @@ class $$ActivityPointsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get timestamp =>
       $composableBuilder(column: $table.timestamp, builder: (column) => column);
+
+  GeneratedColumn<int> get accuracy =>
+      $composableBuilder(column: $table.accuracy, builder: (column) => column);
+
+  GeneratedColumn<double> get hdop =>
+      $composableBuilder(column: $table.hdop, builder: (column) => column);
+
+  GeneratedColumn<int> get satelliteCount => $composableBuilder(
+    column: $table.satelliteCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get provider =>
+      $composableBuilder(column: $table.provider, builder: (column) => column);
+
+  GeneratedColumn<bool> get isMocked =>
+      $composableBuilder(column: $table.isMocked, builder: (column) => column);
+
+  GeneratedColumn<String> get fixType =>
+      $composableBuilder(column: $table.fixType, builder: (column) => column);
+
+  GeneratedColumn<String> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
 }
 
 class $$ActivityPointsTableTableManager
@@ -2283,6 +2741,13 @@ class $$ActivityPointsTableTableManager
                 Value<double> elevation = const Value.absent(),
                 Value<double> pace = const Value.absent(),
                 Value<DateTime> timestamp = const Value.absent(),
+                Value<int?> accuracy = const Value.absent(),
+                Value<double?> hdop = const Value.absent(),
+                Value<int?> satelliteCount = const Value.absent(),
+                Value<String?> provider = const Value.absent(),
+                Value<bool> isMocked = const Value.absent(),
+                Value<String?> fixType = const Value.absent(),
+                Value<String?> state = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ActivityPointsCompanion(
                 activityId: activityId,
@@ -2292,6 +2757,13 @@ class $$ActivityPointsTableTableManager
                 elevation: elevation,
                 pace: pace,
                 timestamp: timestamp,
+                accuracy: accuracy,
+                hdop: hdop,
+                satelliteCount: satelliteCount,
+                provider: provider,
+                isMocked: isMocked,
+                fixType: fixType,
+                state: state,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2303,6 +2775,13 @@ class $$ActivityPointsTableTableManager
                 required double elevation,
                 required double pace,
                 required DateTime timestamp,
+                Value<int?> accuracy = const Value.absent(),
+                Value<double?> hdop = const Value.absent(),
+                Value<int?> satelliteCount = const Value.absent(),
+                Value<String?> provider = const Value.absent(),
+                Value<bool> isMocked = const Value.absent(),
+                Value<String?> fixType = const Value.absent(),
+                Value<String?> state = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ActivityPointsCompanion.insert(
                 activityId: activityId,
@@ -2312,6 +2791,13 @@ class $$ActivityPointsTableTableManager
                 elevation: elevation,
                 pace: pace,
                 timestamp: timestamp,
+                accuracy: accuracy,
+                hdop: hdop,
+                satelliteCount: satelliteCount,
+                provider: provider,
+                isMocked: isMocked,
+                fixType: fixType,
+                state: state,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

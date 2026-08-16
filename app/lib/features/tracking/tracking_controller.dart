@@ -7,8 +7,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:mwendo_gps_engine/mwendo_gps_engine.dart';
+import 'package:gps_pipeline/gps_pipeline.dart';
 
 enum AppEngineState { idle, recording, paused, recovering }
+
+class DisplaySegment {
+  final List<TrackPoint> points;
+  final FilterStatus type;
+  
+  const DisplaySegment({required this.points, required this.type});
+}
 
 class TrackingState {
   final AppEngineState state;
@@ -66,6 +74,9 @@ class TrackingState {
 class TrackingModel extends Notifier<TrackingState> {
   final _engine = MwendoGpsEngine();
   final List<TrackPoint> _pts = [];
+  final List<RawFix> _rawFixes = [];
+  final _pipeline = GpsPipeline(profile: ActivityProfile.run, enableMapMatching: true);
+  
   double _elevationGain = 0;
   Timer? _ticker;
   DateTime? _runStart;
@@ -76,16 +87,8 @@ class TrackingModel extends Notifier<TrackingState> {
 
   // ponytail: the live map polyline is decoupled from the raw GPS stream.
   // Raw points remain the source of truth (DB / GPX / distance / SOS); the
-  // EMA-smoothed, noise-culled _displayPts is what the map actually draws.
-  // Ceiling: a single fixed EMA with the accuracy→alpha table below can't
-  // recover path shape on its own — upgrade to a Kalman filter if lag shows.
-  final List<TrackPoint> _displayPts = [];
-  double _smoothLat = 0;
-  double _smoothLng = 0;
-  bool _hasSmooth = false;
-  double _kalmanVariance = -1;
-  DateTime? _lastFilterTime;
-  static const double _cullMeters = 10.0;
+  // pipeline-smoothed _displaySegments is what the map actually draws.
+  final List<DisplaySegment> _displaySegments = [];
 
   /// Serial command queue — prevents start/stop/pause race conditions during
   // rapid pause/resume cycles (blueprint: "lock start/stop commands").
@@ -97,9 +100,12 @@ class TrackingModel extends Notifier<TrackingState> {
 
   /// Raw GPS points — the source of truth for DB/ GPX/ distance/ SOS.
   List<TrackPoint> get points => _pts;
+  
+  /// Diagnostic log of every single raw fix.
+  List<RawFix> get rawFixes => _rawFixes;
 
-  /// Smoothed, noise-culled points for the live map polyline.
-  List<TrackPoint> get displayPoints => _displayPts;
+  /// Smoothed, gap-aware segments for the live map polyline.
+  List<DisplaySegment> get displaySegments => _displaySegments;
 
   @override
   TrackingState build() {
@@ -163,6 +169,11 @@ class TrackingModel extends Notifier<TrackingState> {
                 'hr': t.heartRate,
                 'cadence': t.cadence,
                 'accuracy': t.accuracy,
+                'hdop': t.hdop,
+                'satelliteCount': t.satelliteCount,
+                'provider': t.provider,
+                'isMocked': t.isMocked,
+                'fixType': t.fixType,
               })
           .toList();
       await _recoveryFile().writeAsString(jsonEncode({
@@ -216,12 +227,35 @@ class TrackingModel extends Notifier<TrackingState> {
                     heartRate: e['hr'] as int?,
                     cadence: e['cadence'] as int?,
                     accuracy: (e['accuracy'] as num?)?.toInt() ?? 0,
+                    hdop: (e['hdop'] as num?)?.toDouble(),
+                    satelliteCount: e['satelliteCount'] as int?,
+                    provider: e['provider'] as String?,
+                    isMocked: e['isMocked'] as bool? ?? false,
+                    fixType: e['fixType'] as String? ?? 'unknown',
                     state: 'run',
                   ))
               .toList();
       _pts
         ..clear()
         ..addAll(pts);
+      _rawFixes.clear();
+      for (final p in pts) {
+        _rawFixes.add(RawFix(
+          lat: p.lat,
+          lng: p.lng,
+          elevation: p.elevation,
+          timestamp: p.timestamp,
+          speedMps: p.speedMps,
+          heartRate: p.heartRate,
+          cadence: p.cadence,
+          accuracy: p.accuracy,
+          hdop: p.hdop,
+          satelliteCount: p.satelliteCount,
+          provider: p.provider,
+          isMocked: p.isMocked,
+          fixType: p.fixType,
+        ));
+      }
       _rebuildDisplay();
       _elevationGain = (j['elevationGainM'] as num?)?.toDouble() ?? 0;
       _accumulatedMs = (j['elapsedMs'] as num?)?.toInt() ?? 0;
@@ -267,10 +301,8 @@ class TrackingModel extends Notifier<TrackingState> {
       }
     }
     _pts.clear();
-    _displayPts.clear();
-    _hasSmooth = false;
-    _kalmanVariance = -1;
-    _lastFilterTime = null;
+    _rawFixes.clear();
+    _displaySegments.clear();
     _elevationGain = 0;
     _accumulatedMs = 0;
     _accumulatedMovingMs = 0;
@@ -300,40 +332,41 @@ class TrackingModel extends Notifier<TrackingState> {
   }
 
   void _onPoint(TrackPoint p) {
-    final isMoving = p.speedMps > 0.3;
+    final raw = RawFix(
+      lat: p.lat,
+      lng: p.lng,
+      elevation: p.elevation,
+      timestamp: p.timestamp,
+      speedMps: p.speedMps,
+      heartRate: p.heartRate,
+      cadence: p.cadence,
+      accuracy: p.accuracy,
+      hdop: p.hdop,
+      satelliteCount: p.satelliteCount,
+      provider: p.provider,
+      isMocked: p.isMocked,
+      fixType: p.fixType,
+    );
+    _rawFixes.add(raw);
 
-    // ponytail: halt point recording when stationary or inaccurate to prevent distance inflation and jagged polylines.
-    // Ensure we drop wildly inaccurate points immediately, even the very first one.
-    if (p.accuracy == 0 || p.accuracy > 20) {
-      if (_movingStart != null) {
-        _accumulatedMovingMs += DateTime.now().difference(_movingStart!).inMilliseconds;
-        _movingStart = null;
-      }
-      return;
-    }
+    final result = _pipeline.process(raw);
+    if (result == null) return; // buffered
 
-    if (!isMoving) {
-      if (_movingStart != null) {
-        _accumulatedMovingMs += DateTime.now().difference(_movingStart!).inMilliseconds;
-        _movingStart = null;
-      }
-      // We must accept the very first point even if stationary so the map can load the user's initial location.
-      // After that, we drop stationary points to prevent distance inflation and drift.
-      if (_pts.isNotEmpty) return;
-    }
+    if (!result.isAccepted) return;
 
-    // Track moving time: start timer if speed > 0.3 m/s
-    if (isMoving) {
-      _movingStart ??= DateTime.now();
+    final isMoving = result.filterStatus == FilterStatus.filtered || result.filterStatus == FilterStatus.gapLong || result.filterStatus == FilterStatus.gapShort;
+
+    if (isMoving && _movingStart == null) {
+      _movingStart = DateTime.now();
+    } else if (!isMoving && _movingStart != null) {
+      _accumulatedMovingMs += DateTime.now().difference(_movingStart!).inMilliseconds;
+      _movingStart = null;
     }
 
     if (_pts.isNotEmpty) {
       final prev = _pts.last;
       final d = _haversine(prev.lat, prev.lng, p.lat, p.lng);
       
-      // Ignore micro-movements (GPS drift) even if speed temporarily spiked
-      if (d < 2.0) return;
-
       final gained = (p.elevation - prev.elevation);
       if (gained > 0) _elevationGain += gained;
       
@@ -358,120 +391,47 @@ class TrackingModel extends Notifier<TrackingState> {
     }
 
     _pts.add(p);
-    _addDisplayPoint(p);
+    _addDisplayPoint(p, result);
 
-    // Throttled recovery snapshot (every 10 points keeps the file small).
     if (_pts.length % 10 == 0) {
       _pendingWrite = _writeRecovery();
     }
   }
 
-  /// Append a smoothed, noise-culled point to the live map view.
-  /// EMA blends the new raw fix into the running smoothed coordinate; points
-  /// within [_cullMeters] of the last drawn point are dropped so GPS jitter
-  /// on a near-stationary user doesn't zigzag the polyline.
-  /// Sharp turns are detected and preserved; shallow angles trigger tighter culling.
-  void _addDisplayPoint(TrackPoint p) {
-    final isMoving = p.speedMps > 0.3;
-    final now = p.timestamp;
+  void _addDisplayPoint(TrackPoint rawPoint, PipelineResult result) {
+    if (!result.isAccepted) return;
     
-    if (!_hasSmooth || _lastFilterTime == null) {
-      _smoothLat = p.lat;
-      _smoothLng = p.lng;
-      _kalmanVariance = (p.accuracy > 0 ? p.accuracy.toDouble() : 10.0) * (p.accuracy > 0 ? p.accuracy.toDouble() : 10.0);
-      _lastFilterTime = now;
-      _hasSmooth = true;
+    final pt = TrackPoint(
+      lat: result.smoothedLat ?? result.raw.lat,
+      lng: result.smoothedLng ?? result.raw.lng,
+      elevation: result.raw.elevation,
+      timestamp: result.raw.timestamp,
+      speedMps: result.raw.speedMps,
+      heartRate: result.raw.heartRate,
+      cadence: result.raw.cadence,
+      accuracy: result.raw.accuracy,
+      hdop: result.raw.hdop,
+      satelliteCount: result.raw.satelliteCount,
+      provider: result.raw.provider,
+      isMocked: result.raw.isMocked,
+      fixType: result.raw.fixType,
+      state: result.filterStatus.name,
+    );
+
+    if (_displaySegments.isEmpty || _displaySegments.last.type != result.filterStatus) {
+      _displaySegments.add(DisplaySegment(points: [pt], type: result.filterStatus));
     } else {
-      final dt = now.difference(_lastFilterTime!).inMilliseconds.clamp(0, 10000) / 1000.0;
-      if (dt > 0) {
-        final motionSigma = isMoving ? 5.0 : 0.5;
-        final q = (motionSigma * dt) * (motionSigma * dt);
-        _kalmanVariance += q;
-        
-        final r = (p.accuracy > 0 ? p.accuracy.toDouble() : 10.0) * (p.accuracy > 0 ? p.accuracy.toDouble() : 10.0);
-        final k = _kalmanVariance / (_kalmanVariance + r);
-        
-        _smoothLat += k * (p.lat - _smoothLat);
-        _smoothLng += k * (p.lng - _smoothLng);
-        _kalmanVariance = (1 - k) * _kalmanVariance;
-        _lastFilterTime = now;
-      }
+      _displaySegments.last.points.add(pt);
     }
-    
-    if (_displayPts.isNotEmpty) {
-      final d = _haversine(_displayPts.last.lat, _displayPts.last.lng,
-          _smoothLat, _smoothLng);
-      
-      if (_displayPts.length >= 2) {
-        final isSharpTurn = _isSharpTurn(
-          _displayPts[_displayPts.length - 2],
-          _displayPts.last,
-          TrackPoint(lat: _smoothLat, lng: _smoothLng, elevation: p.elevation, 
-              timestamp: p.timestamp, speedMps: p.speedMps, heartRate: p.heartRate, 
-              cadence: p.cadence, accuracy: p.accuracy, state: p.state),
-        );
-        
-        if (isSharpTurn) {
-          _displayPts.add(_makeSmoothedPoint(p));
-          return;
-        }
-      }
-      
-      final cullDist = isMoving ? _cullMeters / 2 : _cullMeters;
-      if (d < cullDist) return;
-    }
-    
-    _displayPts.add(_makeSmoothedPoint(p));
   }
 
-  TrackPoint _makeSmoothedPoint(TrackPoint p) {
-    return TrackPoint(
-      lat: _smoothLat,
-      lng: _smoothLng,
-      elevation: p.elevation,
-      timestamp: p.timestamp,
-      speedMps: p.speedMps,
-      heartRate: p.heartRate,
-      cadence: p.cadence,
-      accuracy: p.accuracy,
-      state: p.state,
-    );
-  }
-
-  /// Detects sharp turns (angle > 45 degrees) to preserve path shape.
-  bool _isSharpTurn(TrackPoint a, TrackPoint b, TrackPoint c) {
-    final angle = _angleBetween(
-      a.lat, a.lng,
-      b.lat, b.lng,
-      c.lat, c.lng,
-    );
-    return angle > 25;
-  }
-
-  double _angleBetween(double lat1, double lng1, double lat2, double lng2, double lat3, double lng3) {
-    final cosLat = cos(_toRad(lat2));
-    final dx1 = (lng2 - lng1) * cosLat;
-    final dy1 = lat2 - lat1;
-    final dx2 = (lng3 - lng2) * cosLat;
-    final dy2 = lat3 - lat2;
-    
-    final dot = dx1 * dx2 + dy1 * dy2;
-    final mag1 = sqrt(dx1 * dx1 + dy1 * dy1);
-    final mag2 = sqrt(dx2 * dx2 + dy2 * dy2);
-    if (mag1 == 0 || mag2 == 0) return 0;
-    final cosAngle = (dot / (mag1 * mag2)).clamp(-1.0, 1.0);
-    return acos(cosAngle) * 180 / pi;
-  }
-
-  /// (Re)build the smoothed view from the raw points — used after restoring an
-  /// interrupted run so the map shows history without re-streaming GPS.
   void _rebuildDisplay() {
-    _displayPts.clear();
-    _hasSmooth = false;
-    _kalmanVariance = -1;
-    _lastFilterTime = null;
-    for (final p in _pts) {
-      _addDisplayPoint(p);
+    _displaySegments.clear();
+    final results = _pipeline.reprocess(_rawFixes);
+    for (var i = 0; i < results.length; i++) {
+      if (results[i].isAccepted && i < _pts.length) {
+         _addDisplayPoint(_pts[i], results[i]);
+      }
     }
   }
 
@@ -502,10 +462,8 @@ class TrackingModel extends Notifier<TrackingState> {
         // the file (fixes Bug #8).
         await _pendingWrite;
         _pts.clear(); // Clear points before recovery clear (fixes Bug #7)
-        _displayPts.clear();
-        _hasSmooth = false;
-        _kalmanVariance = -1;
-        _lastFilterTime = null;
+        _rawFixes.clear();
+        _displaySegments.clear();
         _sub?.cancel();
         _sub = null;
         _stopTicker();

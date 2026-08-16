@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:maplibre_gl/maplibre_gl.dart';
+
 import 'package:mwendo_app/data/database/app_database.dart';
 import 'package:mwendo_app/data/models/run_record.dart';
 import 'package:mwendo_app/data/repositories/activity_repository.dart';
+import 'package:gps_pipeline/gps_pipeline.dart';
+
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
@@ -68,12 +70,23 @@ void main() {
       elevationGainM: 50.0,
       avgHeartRate: 150,
       avgCadence: 175,
-      route: const [LatLng(1.0, 2.0), LatLng(1.1, 2.1)],
-      elevation: const [100.0, 105.0],
-      pace: const [5.0, 4.8],
-      times: [
-        DateTime.parse('2026-07-12T09:00:00Z'),
-        DateTime.parse('2026-07-12T09:05:00Z'),
+      rawFixes: [
+        RawFix(
+          lat: 1.0,
+          lng: 2.0,
+          elevation: 100.0,
+          timestamp: DateTime.parse('2026-07-12T09:00:00Z'),
+          speedMps: 5.0,
+          accuracy: 10,
+        ),
+        RawFix(
+          lat: 1.1,
+          lng: 2.1,
+          elevation: 105.0,
+          timestamp: DateTime.parse('2026-07-12T09:05:00Z'),
+          speedMps: 4.8,
+          accuracy: 10,
+        ),
       ],
     );
 
@@ -100,10 +113,16 @@ void main() {
       elevationGainM: 50.0,
       avgHeartRate: 150,
       avgCadence: 175,
-      route: const [LatLng(1.0, 2.0)],
-      elevation: const [100.0],
-      pace: const [5.0],
-      times: [DateTime.parse('2026-07-12T09:00:00Z')],
+      rawFixes: [
+        RawFix(
+          lat: 1.0,
+          lng: 2.0,
+          elevation: 100.0,
+          timestamp: DateTime.parse('2026-07-12T09:00:00Z'),
+          speedMps: 5.0,
+          accuracy: 10,
+        )
+      ],
     );
     final run2 = RunRecord(
       id: 'test-run-2',
@@ -116,10 +135,16 @@ void main() {
       elevationGainM: 20.0,
       avgHeartRate: 140,
       avgCadence: 170,
-      route: const [LatLng(2.0, 3.0)],
-      elevation: const [200.0],
-      pace: const [6.0],
-      times: [DateTime.parse('2026-07-12T18:00:00Z')],
+      rawFixes: [
+        RawFix(
+          lat: 2.0,
+          lng: 3.0,
+          elevation: 200.0,
+          timestamp: DateTime.parse('2026-07-12T18:00:00Z'),
+          speedMps: 6.0,
+          accuracy: 10,
+        )
+      ],
     );
 
     await repository.save(run1);
@@ -143,10 +168,16 @@ void main() {
       elevationGainM: 50.0,
       avgHeartRate: 150,
       avgCadence: 175,
-      route: const [LatLng(1.0, 2.0)],
-      elevation: const [100.0],
-      pace: const [5.0],
-      times: [DateTime.parse('2026-07-12T09:00:00Z')],
+      rawFixes: [
+        RawFix(
+          lat: 1.0,
+          lng: 2.0,
+          elevation: 100.0,
+          timestamp: DateTime.parse('2026-07-12T09:00:00Z'),
+          speedMps: 5.0,
+          accuracy: 10,
+        )
+      ],
     );
 
     await repository.save(run);
