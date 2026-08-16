@@ -3,12 +3,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import '../../data/models/run_record.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:mwendo_app/data/models/session_draft.dart';
+import 'package:mwendo_app/data/repositories/session_draft_repository.dart';
 import 'package:mwendo_gps_engine/mwendo_gps_engine.dart';
 import 'package:gps_pipeline/gps_pipeline.dart';
-
+import 'package:mwendo_app/features/tracking/map_match_job.dart';
 enum AppEngineState { idle, recording, paused, recovering }
 
 class DisplaySegment {
@@ -29,6 +32,9 @@ class TrackingState {
   final double elevationGainM;
   final int calories;
   final int pointCount; // lightweight signal for UI, avoids copying _pts every tick
+  final double currentAccuracy; // latest GPS accuracy for readiness indicator
+  final DateTime? lastPointTime; // time of the last received GPS point
+  final ActivityProfile profile;
 
   const TrackingState({
     required this.state,
@@ -41,6 +47,9 @@ class TrackingState {
     this.elevationGainM = 0,
     this.calories = 0,
     this.pointCount = 0,
+    this.currentAccuracy = double.infinity,
+    this.lastPointTime,
+    this.profile = ActivityProfile.run,
   });
 
   static const initial = TrackingState(state: AppEngineState.idle);
@@ -56,8 +65,11 @@ class TrackingState {
     double? elevationGainM,
     int? calories,
     int? pointCount,
-  }) =>
-      TrackingState(
+    double? currentAccuracy,
+    DateTime? lastPointTime,
+    ActivityProfile? profile,
+  }) {
+    return TrackingState(
         state: state ?? this.state,
         distanceM: distanceM ?? this.distanceM,
         elapsedMs: elapsedMs ?? this.elapsedMs,
@@ -68,21 +80,25 @@ class TrackingState {
         elevationGainM: elevationGainM ?? this.elevationGainM,
         calories: calories ?? this.calories,
         pointCount: pointCount ?? this.pointCount,
+        currentAccuracy: currentAccuracy ?? this.currentAccuracy,
+        lastPointTime: lastPointTime ?? this.lastPointTime,
+        profile: profile ?? this.profile,
       );
+  }
 }
 
 class TrackingModel extends Notifier<TrackingState> {
   final _engine = MwendoGpsEngine();
   final List<TrackPoint> _pts = [];
   final List<RawFix> _rawFixes = [];
-  final _pipeline = GpsPipeline(profile: ActivityProfile.run, enableMapMatching: true);
+  late GpsPipeline _pipeline;
   
   double _elevationGain = 0;
   Timer? _ticker;
   DateTime? _runStart;
   int _accumulatedMs = 0;
   int _accumulatedMovingMs = 0;
-  DateTime? _movingStart;
+  DateTime? _lastPtWallClock;
   StreamSubscription<TrackPoint>? _sub;
 
   // ponytail: the live map polyline is decoupled from the raw GPS stream.
@@ -98,7 +114,7 @@ class TrackingModel extends Notifier<TrackingState> {
   /// before clearing, preventing a stale write from resurrecting a ghost run.
   Future<void>? _pendingWrite;
 
-  /// Raw GPS points — the source of truth for DB/ GPX/ distance/ SOS.
+  /// Accepted GPS points — the source of truth for DB/ GPX/ distance/ SOS.
   List<TrackPoint> get points => _pts;
   
   /// Diagnostic log of every single raw fix.
@@ -109,8 +125,14 @@ class TrackingModel extends Notifier<TrackingState> {
 
   @override
   TrackingState build() {
+    _pipeline = GpsPipeline(profile: ActivityProfile.run);
     ref.onDispose(() => _ticker?.cancel());
     return TrackingState.initial;
+  }
+
+  void setProfile(ActivityProfile profile) {
+    _pipeline = GpsPipeline(profile: profile);
+    state = state.copyWith(profile: profile);
   }
 
   /// Drives `elapsedMs` from the wall clock so the timer ticks live regardless
@@ -122,13 +144,12 @@ class TrackingModel extends Notifier<TrackingState> {
       if (_runStart == null) return;
       final total =
           _accumulatedMs + DateTime.now().difference(_runStart!).inMilliseconds;
-      // Moving time only counts when speed > 0.3 m/s
+      // Moving time only counts exact GPS deltas. We add an optimistic live tick
+      // capped at 10s so the UI feels live between 1hz updates.
       int movingMs = _accumulatedMovingMs;
-      if (_movingStart != null && _pts.isNotEmpty) {
-        final lastSpeed = _pts.last.speedMps;
-        if (lastSpeed > 0.3) {
-          movingMs += DateTime.now().difference(_movingStart!).inMilliseconds;
-        }
+      if (_pts.isNotEmpty && _pts.last.state == FilterStatus.filtered.name && _lastPtWallClock != null) {
+        final liveDelta = DateTime.now().difference(_lastPtWallClock!).inMilliseconds;
+        movingMs += min(liveDelta, 10000);
       }
       state = state.copyWith(
         elapsedMs: total,
@@ -146,9 +167,11 @@ class TrackingModel extends Notifier<TrackingState> {
       _runStart = null;
       // Persist current moving time before clearing the moving timer
       _accumulatedMovingMs = state.movingTimeMs;
-      _movingStart = null;
+      _lastPtWallClock = null;
     }
   }
+
+  String? _draftId;
 
   File _recoveryFile() {
     // ponytail: a single JSON file is the simplest crash-recovery store; swap
@@ -159,30 +182,24 @@ class TrackingModel extends Notifier<TrackingState> {
 
   Future<void> _writeRecovery() async {
     try {
-      final data = _pts
-          .map((t) => {
-                'lat': t.lat,
-                'lng': t.lng,
-                'elevation': t.elevation,
-                'timestamp': t.timestamp.toIso8601String(),
-                'speed': t.speedMps,
-                'hr': t.heartRate,
-                'cadence': t.cadence,
-                'accuracy': t.accuracy,
-                'hdop': t.hdop,
-                'satelliteCount': t.satelliteCount,
-                'provider': t.provider,
-                'isMocked': t.isMocked,
-                'fixType': t.fixType,
-              })
-          .toList();
-      await _recoveryFile().writeAsString(jsonEncode({
-        'distanceM': state.distanceM,
-        'elapsedMs': state.elapsedMs,
-        'movingTimeMs': state.movingTimeMs,
-        'elevationGainM': _elevationGain,
-        'points': data,
-      }));
+      if (_draftId == null) return;
+      final filtered = _pipeline.reprocess(_rawFixes);
+      final draft = SessionDraft(
+        id: _draftId!,
+        rawFixes: _rawFixes.toList(growable: false),
+        filteredResults: filtered,
+        filterVersion: _pipeline.trackVersion,
+        filteredDistanceM: state.distanceM,
+        durationMs: state.elapsedMs,
+        movingTimeMs: state.movingTimeMs,
+        elevationGainM: _elevationGain,
+        calories: state.calories,
+        status: PostProcessingStatus.pending,
+        qualityReport: SessionQualityReport.compute(filtered),
+        activityType: state.profile,
+        createdAt: _rawFixes.isNotEmpty ? _rawFixes.first.timestamp : DateTime.now(),
+      );
+      await ref.read(sessionDraftRepositoryProvider).saveDraft(draft);
     } catch (_) {
       // offline-first: best-effort recovery snapshot
     }
@@ -205,7 +222,7 @@ class TrackingModel extends Notifier<TrackingState> {
       if (!await f.exists()) return false;
       final raw = await f.readAsString();
       final j = jsonDecode(raw) as Map<String, dynamic>;
-      return (j['points'] as List?)?.isNotEmpty ?? false;
+      return (j['rawFixes'] as List?)?.isNotEmpty ?? (j['points'] as List?)?.isNotEmpty ?? false;
     } catch (_) {
       return false;
     }
@@ -217,8 +234,11 @@ class TrackingModel extends Notifier<TrackingState> {
       final f = _recoveryFile();
       if (!await f.exists()) return;
       final j = jsonDecode(await f.readAsString()) as Map<String, dynamic>;
-      final pts = (j['points'] as List)
-              .map((e) => TrackPoint(
+      
+      final fixesList = (j['rawFixes'] as List?) ?? (j['points'] as List?) ?? [];
+      
+      final pts = fixesList
+              .map((e) => RawFix(
                     lat: (e['lat'] as num).toDouble(),
                     lng: (e['lng'] as num).toDouble(),
                     elevation: (e['elevation'] as num).toDouble(),
@@ -232,31 +252,73 @@ class TrackingModel extends Notifier<TrackingState> {
                     provider: e['provider'] as String?,
                     isMocked: e['isMocked'] as bool? ?? false,
                     fixType: e['fixType'] as String? ?? 'unknown',
-                    state: 'run',
                   ))
               .toList();
-      _pts
+
+      _rawFixes
         ..clear()
         ..addAll(pts);
-      _rawFixes.clear();
-      for (final p in pts) {
-        _rawFixes.add(RawFix(
-          lat: p.lat,
-          lng: p.lng,
-          elevation: p.elevation,
-          timestamp: p.timestamp,
-          speedMps: p.speedMps,
-          heartRate: p.heartRate,
-          cadence: p.cadence,
-          accuracy: p.accuracy,
-          hdop: p.hdop,
-          satelliteCount: p.satelliteCount,
-          provider: p.provider,
-          isMocked: p.isMocked,
-          fixType: p.fixType,
-        ));
+
+      _pts.clear();
+      _displaySegments.clear();
+      _pipeline.reset();
+      
+      // Reconstruct filtered points silently
+      for (final p in _rawFixes) {
+        final r = _pipeline.process(p);
+        if (r != null) {
+          final acceptedPt = TrackPoint(
+            raw: NormalizedFix(
+              lat: r.smoothedLat ?? r.raw.lat,
+              lng: r.smoothedLng ?? r.raw.lng,
+              elevation: p.elevation,
+              timestamp: p.timestamp,
+              speedMps: p.speedMps,
+              accuracyM: p.accuracy.toDouble(),
+              hdop: p.hdop,
+              satelliteCount: p.satelliteCount,
+              provider: p.provider ?? 'unknown',
+              isMocked: p.isMocked,
+              fixType: p.fixType,
+            ),
+            heartRate: p.heartRate,
+            cadence: p.cadence,
+            state: r.filterStatus.name,
+          );
+          if (r.isAccepted) {
+            _pts.add(acceptedPt);
+            _addDisplayPoint(acceptedPt, r);
+          }
+        }
       }
-      _rebuildDisplay();
+      
+      for (final r in _pipeline.flush()) {
+        if (r.isAccepted) {
+          final p = r.raw;
+          final acceptedPt = TrackPoint(
+            raw: NormalizedFix(
+              lat: r.smoothedLat ?? r.raw.lat,
+              lng: r.smoothedLng ?? r.raw.lng,
+              elevation: p.elevation,
+              timestamp: p.timestamp,
+              speedMps: p.speedMps,
+              accuracyM: p.accuracy.toDouble(),
+              hdop: p.hdop,
+              satelliteCount: p.satelliteCount,
+              provider: p.provider ?? 'unknown',
+              isMocked: p.isMocked,
+              fixType: p.fixType,
+            ),
+            heartRate: p.heartRate,
+            cadence: p.cadence,
+            state: r.filterStatus.name,
+          );
+          _pts.add(acceptedPt);
+          _addDisplayPoint(acceptedPt, r);
+        }
+      }
+      _pipeline.reset();
+
       _elevationGain = (j['elevationGainM'] as num?)?.toDouble() ?? 0;
       _accumulatedMs = (j['elapsedMs'] as num?)?.toInt() ?? 0;
       _accumulatedMovingMs = (j['movingTimeMs'] as num?)?.toInt() ?? 0;
@@ -293,9 +355,6 @@ class TrackingModel extends Notifier<TrackingState> {
           },
         );
         _startTicker();
-        if (_pts.isNotEmpty && _pts.last.speedMps > 0.3) {
-          _movingStart = DateTime.now();
-        }
         state = state.copyWith(state: AppEngineState.recording);
         return;
       }
@@ -306,7 +365,8 @@ class TrackingModel extends Notifier<TrackingState> {
     _elevationGain = 0;
     _accumulatedMs = 0;
     _accumulatedMovingMs = 0;
-    _movingStart = null;
+    _lastPtWallClock = null;
+    _draftId = RunRecord.newId();
     state = state.copyWith(
       state: AppEngineState.recording,
       distanceM: 0,
@@ -352,46 +412,72 @@ class TrackingModel extends Notifier<TrackingState> {
     final result = _pipeline.process(raw);
     if (result == null) return; // buffered
 
-    if (!result.isAccepted) return;
+    _handleResult(result, p);
+  }
 
-    final isMoving = result.filterStatus == FilterStatus.filtered || result.filterStatus == FilterStatus.gapLong || result.filterStatus == FilterStatus.gapShort;
-
-    if (isMoving && _movingStart == null) {
-      _movingStart = DateTime.now();
-    } else if (!isMoving && _movingStart != null) {
-      _accumulatedMovingMs += DateTime.now().difference(_movingStart!).inMilliseconds;
-      _movingStart = null;
+  void _handleResult(PipelineResult result, [TrackPoint? originalPt]) {
+    if (!result.isAccepted) {
+        // ponytail: diagnostics only. Do not accumulate distance or pace.
+        return;
     }
 
+    final isFiltered = result.filterStatus == FilterStatus.filtered;
+
+    final smoothedLat = result.smoothedLat ?? result.raw.lat;
+    final smoothedLng = result.smoothedLng ?? result.raw.lng;
+    final smoothedSpeed = result.smoothedSpeedMps ?? result.raw.speedMps;
+
+    double d = 0;
     if (_pts.isNotEmpty) {
       final prev = _pts.last;
-      final d = _haversine(prev.lat, prev.lng, p.lat, p.lng);
-      
-      final gained = (p.elevation - prev.elevation);
+      d = _haversine(prev.lat, prev.lng, smoothedLat, smoothedLng);
+      final gained = (result.raw.elevation - prev.elevation);
       if (gained > 0) _elevationGain += gained;
-      
-      state = state.copyWith(
-        state: AppEngineState.recording,
-        distanceM: state.distanceM + d,
-        paceMinPerKm: p.speedMps > 0 ? 1000 / (p.speedMps * 60) : state.paceMinPerKm,
-        heartRate: p.heartRate,
-        cadence: p.cadence,
-        elevationGainM: _elevationGain,
-        pointCount: _pts.length + 1,
-      );
-    } else {
-      state = state.copyWith(
-        state: AppEngineState.recording,
-        paceMinPerKm: isMoving ? 1000 / (p.speedMps * 60) : 0.0,
-        heartRate: p.heartRate,
-        cadence: p.cadence,
-        elevationGainM: 0,
-        pointCount: 1,
-      );
-    }
 
-    _pts.add(p);
-    _addDisplayPoint(p, result);
+      if (isFiltered && prev.state == FilterStatus.filtered.name) {
+        final deltaMs = result.raw.timestamp.difference(prev.timestamp).inMilliseconds;
+        if (deltaMs > 0 && deltaMs <= 10000) {
+          _accumulatedMovingMs += deltaMs;
+        }
+      }
+    }
+    
+    _lastPtWallClock = DateTime.now();
+
+    state = state.copyWith(
+      state: AppEngineState.recording,
+      distanceM: state.distanceM + d,
+      paceMinPerKm: (isFiltered && smoothedSpeed > 0) ? 1000 / (smoothedSpeed * 60) : state.paceMinPerKm,
+      heartRate: originalPt?.heartRate ?? result.raw.heartRate,
+      cadence: originalPt?.cadence ?? result.raw.cadence,
+      elevationGainM: _elevationGain,
+      pointCount: _pts.length + 1,
+      currentAccuracy: result.raw.accuracy.toDouble(),
+      lastPointTime: DateTime.now(),
+    );
+
+    // ponytail: Store the smoothed/accepted coordinates in the points array
+    // so that later downstream clients don't accidentally compute distance on raw.
+    final acceptedPt = TrackPoint(
+      raw: NormalizedFix(
+        lat: smoothedLat,
+        lng: smoothedLng,
+        elevation: originalPt?.elevation ?? result.raw.elevation,
+        timestamp: originalPt?.timestamp ?? result.raw.timestamp,
+        speedMps: originalPt?.speedMps ?? result.raw.speedMps,
+        accuracyM: (originalPt?.accuracy ?? result.raw.accuracy).toDouble(),
+        hdop: originalPt?.hdop ?? result.raw.hdop,
+        satelliteCount: originalPt?.satelliteCount ?? result.raw.satelliteCount,
+        provider: originalPt?.provider ?? result.raw.provider ?? 'unknown',
+        isMocked: originalPt?.isMocked ?? result.raw.isMocked,
+        fixType: originalPt?.fixType ?? result.raw.fixType,
+      ),
+      heartRate: originalPt?.heartRate ?? result.raw.heartRate,
+      cadence: originalPt?.cadence ?? result.raw.cadence,
+      state: originalPt?.state ?? result.filterStatus.name,
+    );
+    _pts.add(acceptedPt);
+    _addDisplayPoint(acceptedPt, result);
 
     if (_pts.length % 10 == 0) {
       _pendingWrite = _writeRecovery();
@@ -402,19 +488,21 @@ class TrackingModel extends Notifier<TrackingState> {
     if (!result.isAccepted) return;
     
     final pt = TrackPoint(
-      lat: result.smoothedLat ?? result.raw.lat,
-      lng: result.smoothedLng ?? result.raw.lng,
-      elevation: result.raw.elevation,
-      timestamp: result.raw.timestamp,
-      speedMps: result.raw.speedMps,
+      raw: NormalizedFix(
+        lat: result.smoothedLat ?? result.raw.lat,
+        lng: result.smoothedLng ?? result.raw.lng,
+        elevation: result.raw.elevation,
+        timestamp: result.raw.timestamp,
+        speedMps: result.raw.speedMps,
+        accuracyM: result.raw.accuracy.toDouble(),
+        hdop: result.raw.hdop,
+        satelliteCount: result.raw.satelliteCount,
+        provider: result.raw.provider ?? 'unknown',
+        isMocked: result.raw.isMocked,
+        fixType: result.raw.fixType,
+      ),
       heartRate: result.raw.heartRate,
       cadence: result.raw.cadence,
-      accuracy: result.raw.accuracy,
-      hdop: result.raw.hdop,
-      satelliteCount: result.raw.satelliteCount,
-      provider: result.raw.provider,
-      isMocked: result.raw.isMocked,
-      fixType: result.raw.fixType,
       state: result.filterStatus.name,
     );
 
@@ -425,19 +513,61 @@ class TrackingModel extends Notifier<TrackingState> {
     }
   }
 
-  void _rebuildDisplay() {
-    _displaySegments.clear();
+
+
+  RunRecord buildRunRecord(String type, {String? ghostId, bool? ghostWon, int? ghostRaceVersion}) {
     final results = _pipeline.reprocess(_rawFixes);
-    for (var i = 0; i < results.length; i++) {
-      if (results[i].isAccepted && i < _pts.length) {
-         _addDisplayPoint(_pts[i], results[i]);
+    final rawFixes = _rawFixes.toList(growable: false);
+    
+    int hrSum = 0, hrCount = 0, cadenceSum = 0, cadenceCount = 0;
+    for (final p in rawFixes) {
+      if (p.heartRate != null) { hrSum += p.heartRate!; hrCount++; }
+      if (p.cadence != null) { cadenceSum += p.cadence!; cadenceCount++; }
+    }
+
+    double finalDistanceM = 0;
+    PipelineResult? prev;
+    for (final r in results) {
+      if (r.filterStatus == FilterStatus.filtered) {
+        if (prev != null) {
+          finalDistanceM += _haversine(
+            prev.smoothedLat ?? prev.raw.lat,
+            prev.smoothedLng ?? prev.raw.lng,
+            r.smoothedLat ?? r.raw.lat,
+            r.smoothedLng ?? r.raw.lng,
+          );
+        }
+        prev = r;
       }
     }
+    
+    return RunRecord.fromFiltered(
+      id: RunRecord.newId(),
+      type: type,
+      startedAt: rawFixes.isNotEmpty ? rawFixes.first.timestamp : DateTime.now(),
+      distanceM: finalDistanceM,
+      durationMs: state.elapsedMs,
+      movingTimeMs: state.movingTimeMs > 0 ? state.movingTimeMs : state.elapsedMs,
+      calories: state.calories,
+      elevationGainM: state.elevationGainM,
+      avgHeartRate: hrCount > 0 ? (hrSum / hrCount).round() : 0,
+      avgCadence: cadenceCount > 0 ? (cadenceSum / cadenceCount).round() : 0,
+      rawFixes: rawFixes,
+      filteredResults: results,
+      trackVersion: _pipeline.trackVersion,
+      ghostId: ghostId,
+      ghostWon: ghostWon,
+      ghostRaceVersion: ghostRaceVersion,
+    );
   }
 
   void pause() => _enqueue(() async {
         _engine.pause();
         _stopTicker();
+        for (final r in _pipeline.flush()) {
+          _handleResult(r);
+        }
+        _pipeline.reset();
         _pendingWrite = _writeRecovery();
         await _pendingWrite;
         state = state.copyWith(state: AppEngineState.paused);
@@ -456,33 +586,97 @@ class TrackingModel extends Notifier<TrackingState> {
         state = state.copyWith(state: AppEngineState.recording);
       });
 
-  Future<void> stop() => _enqueue(() async {
+  Future<SessionDraft?> stop() => _enqueueWithResult(() async {
         // Await any in-flight recovery write before clearing — prevents
         // the race where _writeRecovery writes after _clearRecovery deletes
         // the file (fixes Bug #8).
         await _pendingWrite;
-        _pts.clear(); // Clear points before recovery clear (fixes Bug #7)
-        _rawFixes.clear();
-        _displaySegments.clear();
+
         _sub?.cancel();
         _sub = null;
         _stopTicker();
+
+        for (final r in _pipeline.flush()) {
+          _handleResult(r);
+        }
+        
+        SessionDraft? finalDraft;
+        
+        if (_draftId != null) {
+          final filtered = _pipeline.reprocess(_rawFixes);
+          
+          double finalDistanceM = 0;
+          PipelineResult? prev;
+          for (final r in filtered) {
+            if (r.filterStatus == FilterStatus.filtered) {
+              if (prev != null) {
+                finalDistanceM += _haversine(
+                  prev.smoothedLat ?? prev.raw.lat,
+                  prev.smoothedLng ?? prev.raw.lng,
+                  r.smoothedLat ?? r.raw.lat,
+                  r.smoothedLng ?? r.raw.lng,
+                );
+              }
+              prev = r;
+            }
+          }
+
+          final draft = SessionDraft(
+            id: _draftId!,
+            rawFixes: _rawFixes.toList(growable: false),
+            filteredResults: filtered,
+            filterVersion: _pipeline.trackVersion,
+            filteredDistanceM: finalDistanceM,
+            durationMs: state.elapsedMs,
+            movingTimeMs: state.movingTimeMs,
+            elevationGainM: _elevationGain,
+            calories: state.calories,
+            status: PostProcessingStatus.pending,
+            qualityReport: SessionQualityReport.compute(filtered),
+            activityType: state.profile,
+            createdAt: _rawFixes.isNotEmpty ? _rawFixes.first.timestamp : DateTime.now(),
+          );
+          await ref.read(sessionDraftRepositoryProvider).saveDraft(draft);
+          
+          // Trigger post-session map matching job (fire and forget)
+          ref.read(mapMatchJobProvider).processSession(draft).ignore();
+          finalDraft = draft;
+        }
+        _draftId = null;
+
+        _pipeline.reset();
+
+        _pts.clear(); // Clear points before recovery clear (fixes Bug #7)
+        _rawFixes.clear();
+        _displaySegments.clear();
         await _engine.stop();
         await _clearRecovery();
         state = TrackingState.initial;
+        return finalDraft;
       });
 
-  /// Serialise commands so rapid start/stop/pause can never interleave.
-  /// Exceptions propagate to the caller so corrupt engine state is surfaced
-  /// instead of silently swallowed (fixes Bug #2).
+  Future<void> discardRecovery() => _enqueue(() async {
+        await _clearRecovery();
+        _pts.clear();
+        _rawFixes.clear();
+        _displaySegments.clear();
+        state = TrackingState.initial;
+      });
+
   Future<void> _enqueue(Future<void> Function() op) {
+    return _enqueueWithResult<void>(() async {
+      await op();
+    });
+  }
+
+  Future<T> _enqueueWithResult<T>(Future<T> Function() op) {
     final prev = _lock;
-    final completer = Completer<void>();
+    final completer = Completer<T>();
     _lock = completer.future;
     (prev ?? Future.value()).then((_) async {
       try {
-        await op();
-        completer.complete();
+        final result = await op();
+        completer.complete(result);
       } catch (e, st) {
         // If _start() throws (e.g. platform exception from the GPS engine),
         // propagate the error to the caller so it can rollback state, rather

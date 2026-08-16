@@ -92,6 +92,22 @@ class MwendoGpsEnginePlugin : FlutterPlugin, MethodChannel.MethodCallHandler,
                 stopService()
                 result.success(summary)
             }
+            "getPlatformMetadata" -> {
+                val osVersion = android.os.Build.VERSION.RELEASE
+                val hardwareModel = android.os.Build.MODEL
+                var appVersion = "unknown"
+                try {
+                    val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                    appVersion = pInfo.versionName ?: "unknown"
+                } catch (e: Exception) {
+                    // Ignore
+                }
+                result.success(mapOf(
+                    "osVersion" to "Android $osVersion",
+                    "hardwareModel" to hardwareModel,
+                    "appVersion" to appVersion
+                ))
+            }
             else -> result.notImplemented()
         }
     }

@@ -29,8 +29,8 @@
 
 ### 1.2 Core Purpose & Objectives
 * **Eliminate Telemetry Drift & "Ghost Traces"**: Standard GPS engines suffer from multipath interference, urban canyons, and stationary position wandering. Mwendo implements a multi-stage deterministic pipeline (Quality Gate, Outlier Lookahead, Local ENU 2D Kalman Filter, Stationary Clustering, and Post-Session OSRM Map Matching) that produces smooth tracks while maintaining raw measurement provenance.
-* **Offline-First Resilience**: Full autonomous operation without network connectivity. Workouts are recorded into local SQLite storage via Drift and protected against OS task kills or battery death through a serial disk-recovery snapshot journal (`mwendo_recovery.json`).
-* **"Beat Legends" Pacing Engine**: Runners can race in real-time against mathematical models of iconic world-record performances (Eliud Kipchoge, Kelvin Kiptum, Faith Kipyegon, Kenenisa Bekele, etc.) dynamically scaled across difficulty tiers (*Bronze, Silver, Gold, G.O.A.T.*).
+* **Offline-First Resilience**: Full autonomous operation without network connectivity. Workouts are recorded into local SQLite storage via Drift and protected against OS task kills or battery death through a durable session draft journal (`SessionDrafts` and `SessionPoints` tables in Drift SQLite).
+* **"Beat Legends" Pacing Engine**: Runners can race in real-time against mathematical models of iconic world-record performances (Eliud Kipchoge, Kelvin Kiptum, Faith Kipyegon, Kenenisa Bekele, etc.) dynamically scaled across difficulty tiers (*Bronze, Silver, Gold, G.O.A.T.*), or against their own local offline activity personal bests.
 * **High-Throughput Geospatial Cloud Backend**: A lightweight Go service featuring PostGIS `GEOGRAPHY(LineString, 4326)` geospatial indexing, Douglas-Peucker route simplification (`ST_Simplify`), and Redis Sorted Set weekly leaderboards with graceful in-memory fallbacks.
 
 ### 1.3 Key Value Propositions
@@ -38,9 +38,9 @@
 | :--- | :--- | :--- |
 | **GPS Processing** | Raw averaging or basic thresholding | Multi-stage pipeline with 2D ENU Kalman Filter and 3-point lookahead spike suppression |
 | **Stationary Drift** | Accumulates false distance while standing still | Density-weighted stationary centroid clustering |
-| **Crash Protection** | Run lost if OS kills background activity | Serial recovery journal with auto-restore on restart |
-| **Map Rendering** | Generic vector tiles with online dependencies | Local MapLibre GL dark Carto basemap with dynamic ghost overlay |
-| **Virtual Pacing** | Static target split pace | Segment-by-segment spline interpolation against historical splits |
+| **Crash Protection** | Run lost if OS kills background activity | Durable SQLite session draft journal with auto-restore on restart |
+| **Map Rendering** | Generic vector tiles with online dependencies | Local MapLibre GL dark Carto basemap with dynamic ghost overlay & auto-follow toggle |
+| **Virtual Pacing** | Static target split pace | Segment-by-segment spline interpolation against historical splits or local offline runs |
 | **Cloud Dependency**| Mandatory account lock-in for saving data | 100% offline-first local SQLite with selective cloud sync |
 
 ---
@@ -99,10 +99,10 @@ M-Run-2.0/
 │  (app/lib/features/tracking) │
 └──────┬───────────────┬───────┘
        │               │
-       │ (RawFix)      │ (Async batch snapshot)
+       │ (RawFix)      │ (Real-time Drift SQLite Journal)
        ▼               ▼
 ┌──────────────┐ ┌──────────────────────┐
-│ GpsPipeline  │ │ mwendo_recovery.json │ (Crash-Proof Disk Journal)
+│ GpsPipeline  │ │ SessionDrafts/Points │ (Crash-Proof Drift SQLite Journal)
 └──────┬───────┘ └──────────────────────┘
        │
        ├─► 1. FixValidator: Coordinate range, monotonic timestamp, mock check
@@ -603,6 +603,8 @@ class RunExample {
     // Build immutable RunRecord from finished session
     final record = runRecordFromSession(
       trackPoints: notifier.points,
+      filteredResults: notifier.filteredResults,
+      trackVersion: TrackVersion.kalmanEkf,
       distanceM: trackingState.distanceM,
       durationMs: trackingState.elapsedMs,
       elevationGainM: trackingState.elevationGainM,
@@ -611,7 +613,7 @@ class RunExample {
     );
 
     // Persist to local Drift SQLite database
-    final repo = await ref.read(activityRepositoryProvider.future);
+    final repo = ref.read(activityRepositoryProvider);
     await repo.save(record);
 
     // Stop and clear recovery journal

@@ -44,7 +44,7 @@ void main() {
       await db.customStatement('DELETE FROM activity_points;');
       await db.customStatement('DELETE FROM activities;');
     } catch (_) {}
-    repository = ActivityRepository(db, tempFile);
+    repository = ActivityRepository(db);
   });
 
   tearDown(() async {
@@ -59,7 +59,7 @@ void main() {
   });
 
   test('save() writes run record to file and list() retrieves it', () async {
-    final run = RunRecord(
+    final run = RunRecord.fromLegacy(
       id: 'test-run-1',
       type: 'Morning Run',
       startedAt: DateTime.parse('2026-07-12T09:00:00Z'),
@@ -102,7 +102,7 @@ void main() {
   });
 
   test('get() retrieves correct run record by id', () async {
-    final run1 = RunRecord(
+    final run1 = RunRecord.fromLegacy(
       id: 'test-run-1',
       type: 'Morning Run',
       startedAt: DateTime.parse('2026-07-12T09:00:00Z'),
@@ -124,7 +124,7 @@ void main() {
         )
       ],
     );
-    final run2 = RunRecord(
+    final run2 = RunRecord.fromLegacy(
       id: 'test-run-2',
       type: 'Evening Run',
       startedAt: DateTime.parse('2026-07-12T18:00:00Z'),
@@ -157,7 +157,7 @@ void main() {
   });
 
   test('delete() removes correct run record', () async {
-    final run = RunRecord(
+    final run = RunRecord.fromLegacy(
       id: 'test-run-1',
       type: 'Morning Run',
       startedAt: DateTime.parse('2026-07-12T09:00:00Z'),

@@ -6,13 +6,7 @@ public class MwendoGpsEnginePlugin: NSObject, FlutterPlugin, CLLocationManagerDe
     var locationManager: CLLocationManager?
     var eventSink: FlutterEventSink?
     var activityId: String = UUID().uuidString
-    var distanceM: Double = 0
-    var movingTimeMs: Int = 0
     var startTime: Int = 0
-    var lastLat: Double = 0
-    var lastLng: Double = 0
-    var lastTime: Int = 0
-    var hasLast: Bool = false
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         let methodChannel = FlutterMethodChannel(name: "mwendo_gps_engine", binaryMessenger: registrar.messenger())
@@ -32,6 +26,8 @@ public class MwendoGpsEnginePlugin: NSObject, FlutterPlugin, CLLocationManagerDe
             resume(result: result)
         case "stop":
             stop(result: result)
+        case "getPlatformMetadata":
+            getPlatformMetadata(result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -49,8 +45,6 @@ public class MwendoGpsEnginePlugin: NSObject, FlutterPlugin, CLLocationManagerDe
 
     private func startRecording(result: FlutterResult) {
         activityId = UUID().uuidString
-        distanceM = 0
-        movingTimeMs = 0
         startTime = Int(Date().timeIntervalSince1970 * 1000)
         
         locationManager = CLLocationManager()
@@ -72,10 +66,6 @@ public class MwendoGpsEnginePlugin: NSObject, FlutterPlugin, CLLocationManagerDe
     }
 
     private func resume(result: FlutterResult) {
-        // Re-seed the last-fix anchor so the paused duration isn't counted as
-        // moving time on the first fix after resume.
-        lastTime = Int(Date().timeIntervalSince1970 * 1000)
-        hasLast = false
         locationManager?.startUpdatingLocation()
         result(nil)
     }
@@ -85,9 +75,25 @@ public class MwendoGpsEnginePlugin: NSObject, FlutterPlugin, CLLocationManagerDe
         let duration = Int(Date().timeIntervalSince1970 * 1000) - startTime
         result([
             "activity_id": activityId,
-            "distance_m": distanceM,
             "duration_ms": duration,
-            "moving_time_ms": movingTimeMs
+        ])
+    }
+
+    private func getPlatformMetadata(result: FlutterResult) {
+        let osVersion = UIDevice.current.systemVersion
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        let machineMirror = Mirror(reflecting: systemInfo.machine)
+        let hardwareModel = machineMirror.children.reduce("") { identifier, element in
+            guard let value = element.value as? Int8, value != 0 else { return identifier }
+            return identifier + String(UnicodeScalar(UInt8(value)))
+        }
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        
+        result([
+            "osVersion": "iOS " + osVersion,
+            "hardwareModel": hardwareModel,
+            "appVersion": appVersion
         ])
     }
 
@@ -98,47 +104,37 @@ public class MwendoGpsEnginePlugin: NSObject, FlutterPlugin, CLLocationManagerDe
     }
 
     private func processLocation(_ location: CLLocation) {
-        let speed = location.speed
-        let state = classifyState(speed)
+        let speed = max(0.0, location.speed)
         
-        if hasLast {
-            let distance = calculateDistance(lat1: lastLat, lng1: lastLng, lat2: location.coordinate.latitude, lng2: location.coordinate.longitude)
-            distanceM += distance
-            if state == "run" || state == "walk" {
-                let gap = Int(location.timestamp.timeIntervalSince1970 * 1000) - lastTime
-                // Out-of-order fixes or clock corrections can yield negative or
-                // huge gaps; only count sane, positive deltas.
-                if gap > 0 && gap < 60000 {
-                    movingTimeMs += gap
-                }
-            }
+        var isMocked = false
+        if #available(iOS 15.0, *) {
+            isMocked = location.sourceInformation?.isSimulatedBySoftware == true || location.sourceInformation?.isProducedByAccessory == true
         }
         
-        lastLat = location.coordinate.latitude
-        lastLng = location.coordinate.longitude
-        lastTime = Int(location.timestamp.timeIntervalSince1970 * 1000)
-        hasLast = true
+        var bearing: Double? = nil
+        var bearingAccuracy: Double? = nil
+        if location.course >= 0 {
+            bearing = location.course
+            if #available(iOS 13.4, *) {
+                bearingAccuracy = location.courseAccuracy >= 0 ? location.courseAccuracy : nil
+            }
+        }
         
         eventSink?([
             "lat": location.coordinate.latitude,
             "lng": location.coordinate.longitude,
             "elevation": location.altitude,
-            "timestamp": lastTime,
-            "speed_mps": speed,
+            "timestamp": Int(location.timestamp.timeIntervalSince1970 * 1000),
+            "speed": speed,
             "accuracy": location.horizontalAccuracy,
-            "state": state
+            "verticalAccuracy": location.verticalAccuracy >= 0 ? location.verticalAccuracy : nil,
+            "hdop": nil,
+            "satelliteCount": nil, // CoreLocation doesn't expose satellite count
+            "provider": "gps",
+            "isMocked": isMocked,
+            "fixType": "unknown",
+            "bearing": bearing,
+            "bearingAccuracy": bearingAccuracy,
         ])
-    }
-
-    private func classifyState(_ speed: Double) -> String {
-        if speed < 0.8 { return "idle" }
-        if speed < 5.0 { return "walk" }
-        return "run"
-    }
-
-    private func calculateDistance(lat1: Double, lng1: Double, lat2: Double, lng2: Double) -> Double {
-        let loc1 = CLLocation(latitude: lat1, longitude: lng1)
-        let loc2 = CLLocation(latitude: lat2, longitude: lng2)
-        return loc1.distance(from: loc2)
     }
 }

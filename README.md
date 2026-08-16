@@ -20,8 +20,8 @@
 
 * 🛰️ **Deterministic Multi-Stage GPS Pipeline**: Outlier lookahead, 2D ENU Extended Kalman Filtering, and density-weighted stationary clustering.
 * 🏃 **"Beat Legends" Pacing Engine**: Race in real-time against mathematical models of world-record holders (*Eliud Kipchoge, Kelvin Kiptum, Faith Kipyegon, Kenenisa Bekele, etc.*) scaled across Bronze, Silver, Gold, and G.O.A.T. tiers.
-* 🛡️ **Zero-Loss Crash Recovery**: Local SQLite storage via Drift backed by native C SQLite binaries, alongside a serial journal snapshot recovery system (`mwendo_recovery.json`).
-* 🗺️ **High-Performance Vector Maps**: Local MapLibre GL dark Carto basemap with dynamic ghost overlays and live pace polyline rendering.
+* 🛡️ **Zero-Loss Crash Recovery**: Local SQLite storage via Drift backed by native C SQLite binaries, alongside a durable session draft journal (`SessionDrafts` and `SessionPoints`).
+* 🗺️ **High-Performance Vector Maps**: Local MapLibre GL dark Carto basemap with dynamic ghost overlays, interactive auto-follow camera toggles, and live pace polyline rendering.
 * ☁️ **High-Throughput Geospatial Cloud API**: Go 1.22 backend featuring PostGIS geospatial linestrings, Douglas-Peucker route simplification (`ST_Simplify`), and Redis Sorted Set leaderboards with graceful memory fallbacks.
 * 🌐 **Bilingual English & Swahili UI**: Full localization across curriculum, legends history, and real-time audio/haptic cues.
 

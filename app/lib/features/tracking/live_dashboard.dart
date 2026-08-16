@@ -12,7 +12,6 @@ import 'package:mwendo_app/core/gamification/gamification_provider.dart';
 import 'package:mwendo_app/core/l10n/app_strings.dart';
 import 'package:mwendo_app/core/network/session_provider.dart';
 import 'package:mwendo_app/core/safety/safety_provider.dart';
-import 'package:mwendo_app/data/models/run_record.dart';
 import 'package:mwendo_app/data/repositories/activity_repository.dart';
 import 'package:mwendo_app/features/beat/ghost_race_controller.dart';
 import 'package:mwendo_app/features/beat/ghost_race_utils.dart';
@@ -20,7 +19,10 @@ import 'package:mwendo_app/features/beat/ghost_drawer.dart';
 import 'package:mwendo_app/features/challenges/challenge_evaluator.dart';
 import 'package:mwendo_app/features/learn/data/beat_legends.dart';
 import 'package:mwendo_app/features/safety/safety_service.dart';
+import 'map_match_job.dart';
 import 'package:mwendo_app/features/tracking/tracking_controller.dart';
+import 'package:mwendo_app/features/tracking/activity_type_selector.dart';
+import 'package:mwendo_app/features/tracking/recovery_card.dart';
 import 'package:mwendo_app/widgets/celebration_overlay.dart';
 import 'package:mwendo_app/widgets/metric_tile.dart';
 import 'package:mwendo_app/widgets/mwendo_map.dart';
@@ -110,6 +112,14 @@ class _LiveDashboardState extends ConsumerState<LiveDashboard> {
           userElapsedMs: next.elapsedMs.toDouble(),
           routePoints: routePoints,
         );
+
+        GhostComparisonReliability reliability = GhostComparisonReliability.reliable;
+        if (next.lastPointTime != null && DateTime.now().difference(next.lastPointTime!) > const Duration(seconds: 10)) {
+          reliability = GhostComparisonReliability.paused;
+        } else if (next.currentAccuracy > 10.0) {
+          reliability = GhostComparisonReliability.degraded;
+        }
+        ref.read(ghostRaceControllerProvider.notifier).setReliability(reliability);
       }
     });
 
@@ -155,7 +165,7 @@ class _LiveDashboardState extends ConsumerState<LiveDashboard> {
                     Positioned(
                       top: MediaQuery.of(context).padding.top + AppTheme.s12,
                       left: AppTheme.s16,
-                      child: _StatusPill(state: m.state),
+                      child: _StatusPill(state: m.state, accuracy: m.currentAccuracy),
                     ),
                     if (!isIdle)
                       ghostRace.maybeWhen(
@@ -182,9 +192,47 @@ class _LiveDashboardState extends ConsumerState<LiveDashboard> {
                     ),
                     // Ghost drawer for live split comparison
                     if (!isIdle) const GhostDrawer(),
+                    // Pause Semantics Card
+                    if (m.state == AppEngineState.paused)
+                      Positioned(
+                        top: MediaQuery.of(context).padding.top + AppTheme.s12 + (ghostRace is GhostRaceRacingData ? 72 : 36),
+                        left: AppTheme.s16,
+                        right: AppTheme.s16,
+                        child: Container(
+                          padding: const EdgeInsets.all(AppTheme.s12),
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerHigh,
+                            borderRadius: BorderRadius.circular(AppTheme.r12),
+                            border: Border.all(color: AppTheme.paused),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4)),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.pause_circle_outline, color: AppTheme.paused),
+                              const SizedBox(width: AppTheme.s12),
+                              Expanded(
+                                child: Text(
+                                  'Auto-paused. Move faster to resume tracking or tap Resume below.',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
+              if (isIdle)
+                ActivityTypeSelector(
+                  selectedProfile: m.profile,
+                  onSelected: (profile) {
+                    Haptics.light();
+                    ref.read(trackingModelProvider.notifier).setProfile(profile);
+                  },
+                ),
               // Bottom panel - only show metrics when not idle
               if (!isIdle)
                 Expanded(
@@ -310,8 +358,18 @@ children: [
                 ),
             ],
           ),
-          // Control buttons - positioned differently based on state
-          if (showStart)
+          
+          if (m.state == AppEngineState.recovering)
+            Positioned(
+              bottom: MediaQuery.of(context).padding.bottom + AppTheme.s16,
+              left: 0,
+              right: 0,
+              child: RecoveryCard(
+                onResume: () => _requestAndStart(ref, context),
+                onDiscard: () => ref.read(trackingModelProvider.notifier).discardRecovery(),
+              ),
+            )
+          else if (showStart)
             Positioned(
               bottom: MediaQuery.of(context).padding.bottom + 72 + AppTheme.s32,
               left: 0,
@@ -470,22 +528,13 @@ children: [
     // Capture ALL state BEFORE calling stop() which resets to initial.
     final m = ref.read(trackingModelProvider);
     final notifier = ref.read(trackingModelProvider.notifier);
+    
     final trackPoints = List<TrackPoint>.from(notifier.points);
     final distanceM = m.distanceM;
     final elapsedMs = m.elapsedMs;
     final movingTimeMs = m.movingTimeMs;
     final elevationGainM = m.elevationGainM;
-    final calories = m.calories;
-    final heartRate = m.heartRate;
-    // Calculate average cadence from trackpoints
-    int cadenceSum = 0, cadenceCount = 0;
-    for (final p in trackPoints) {
-      if (p.cadence != null) {
-        cadenceSum += p.cadence!;
-        cadenceCount++;
-      }
-    }
-    final avgCadence = cadenceCount > 0 ? (cadenceSum / cadenceCount).round() : 0;
+
     final ghostRaceState = ref.read(ghostRaceControllerProvider);
     final ghost = ghostRaceState.maybeWhen(
       racing: (r) => r.ghost,
@@ -493,35 +542,14 @@ children: [
       finished: (g) => g.ghost,
     );
 
-    await ref.read(trackingModelProvider.notifier).stop();
-
-    if (distanceM < 1) {
+    if (m.distanceM < 1) {
+      await notifier.stop();
       ref.read(ghostRaceControllerProvider.notifier).reset();
       return;
     }
 
-    final record = runRecordFromSession(
-      trackPoints: trackPoints,
-      distanceM: distanceM,
-      durationMs: elapsedMs,
-      elevationGainM: elevationGainM,
-      calories: calories,
-      movingTimeMs: movingTimeMs,
-      avgHeartRate: heartRate,
-      avgCadence: avgCadence,
-    );
-    try {
-      final repo = await ref.read(activityRepositoryProvider.future);
-      await repo.save(record);
-      debugPrint('Run saved successfully: id=${record.id}, distance=${distanceM}m');
-    } catch (e, st) {
-      debugPrint('Run save failed: $e\n$st');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save run')),
-        );
-      }
-    }
+    var record = notifier.buildRunRecord('Run');
+    final draft = await notifier.stop();
     // Invalidate repository to force all dependent providers to re-read
     ref.invalidate(activityRepositoryProvider);
     ref.invalidate(activitiesProvider);
@@ -556,19 +584,53 @@ children: [
     }
 
     // Handle ghost race finish
+    List<dynamic> newlyGhost = [];
+    bool distanceChanged = false;
+    
     if (ghost != null && ghostRaceState is GhostRaceRacingData) {
-      final userAvg = (elapsedMs / 60000) / (distanceM / 1000);
+      final finalDistanceM = record.distanceM;
+      distanceChanged = distanceM > 0 && (finalDistanceM - distanceM).abs() > (distanceM * 0.02);
+      
+      final userAvg = (elapsedMs / 60000) / (finalDistanceM / 1000);
       final beat = userAvg <= ghost.avgPaceMinPerKm;
-      final newlyGhost = ref.read(gamificationProvider.notifier).recordBeatLegend(ghost, beat);
+      newlyGhost = ref.read(gamificationProvider.notifier).recordBeatLegend(ghost, beat);
+
+      // Update the record with ghost data before saving (if needed)
+      record = record.copyWith(
+        ghostId: ghost.id,
+        ghostWon: beat,
+        ghostRaceVersion: 1,
+      );
 
       // Finish the ghost race controller
       ref.read(ghostRaceControllerProvider.notifier).finish(
         userWon: beat,
         userElapsedMs: elapsedMs,
       );
+    }
 
+    // Save the record now that it is fully updated
+    try {
+      final repo = ref.read(activityRepositoryProvider);
+      await repo.save(record);
+      debugPrint('Run saved successfully: id=${record.id}, distance=${record.distanceM}m');
+    } catch (e, st) {
+      debugPrint('Run save failed: $e\n$st');
       if (mounted) {
-        // Navigate to ghost result screen
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save run')),
+        );
+      }
+    }
+
+    if (mounted) {
+      // Map Match Job
+      if (draft != null) {
+        ref.read(mapMatchJobProvider).processSession(draft);
+      }
+
+      // Navigate to results
+      if (ghost != null && ghostRaceState is GhostRaceRacingData) {
         final ghostRaceFinal = ref.read(ghostRaceControllerProvider);
         ghostRaceFinal.maybeWhen(
           finished: (finished) {
@@ -576,6 +638,7 @@ children: [
               'tier': finished.tier.name,
               'won': finished.result == GhostRaceResult.win,
               'elapsedMs': finished.userElapsedMs,
+              'recalculated': distanceChanged,
               'splits': finished.splitComparisons.map((s) => {
                 'index': s.splitIndex,
                 'ghostTime': s.ghostSplitTime,
@@ -727,7 +790,8 @@ class _ControlBar extends ConsumerWidget {
 
 class _StatusPill extends ConsumerWidget {
   final AppEngineState state;
-  const _StatusPill({required this.state});
+  final double accuracy;
+  const _StatusPill({required this.state, required this.accuracy});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -738,8 +802,23 @@ class _StatusPill extends ConsumerWidget {
       AppEngineState.paused: (L10n.tr('paused', locale), AppTheme.paused),
       AppEngineState.recovering: (L10n.tr('gps_searching', locale), AppTheme.paused),
     };
-    final (label, color) = map[state] ?? (L10n.tr('unknown', locale), AppTheme.idle);
-    final live = state == AppEngineState.recording;
+    
+    var (label, color) = map[state] ?? (L10n.tr('unknown', locale), AppTheme.idle);
+    
+    // Override color and label based on accuracy if recording
+    if (state == AppEngineState.recording) {
+      if (accuracy <= 10.0) {
+        color = AppTheme.recording;
+      } else if (accuracy <= 30.0) {
+        color = Colors.orange;
+        label = L10n.tr('gps_poor', locale);
+      } else {
+        color = AppTheme.paused; // Pulsating gray or red
+        label = L10n.tr('gps_searching', locale);
+      }
+    }
+
+    final live = state == AppEngineState.recording && accuracy <= 30.0;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.s12, vertical: AppTheme.s6),
       decoration: BoxDecoration(
@@ -762,7 +841,7 @@ class _StatusPill extends ConsumerWidget {
           ),
           const SizedBox(width: AppTheme.s8),
           Text(
-            label,
+            accuracy > 0 && accuracy < 100 ? '$label (${accuracy.toStringAsFixed(0)}m)' : label,
             style: Theme.of(context).textTheme.labelMedium!.copyWith(
                   color: Colors.white,
                   letterSpacing: 0.4,

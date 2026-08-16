@@ -3,7 +3,8 @@ import 'dart:math';
 class CoordinateUtil {
   static const double _r = 6371000.0; // Earth radius in meters
 
-  static double haversineMetres(double lat1, double lon1, double lat2, double lon2) {
+  static double haversineMetres(
+      double lat1, double lon1, double lat2, double lon2) {
     final dLat = _toRad(lat2 - lat1);
     final dLon = _toRad(lon2 - lon1);
     final a = sin(dLat / 2) * sin(dLat / 2) +

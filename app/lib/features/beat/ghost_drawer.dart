@@ -48,7 +48,15 @@ class GhostDrawer extends ConsumerWidget {
                 ),
               ),
               // Header
-              _DrawerHeader(ghost: racing.ghost, tier: racing.tier, deltaSeconds: racing.deltaSeconds, locale: locale),
+              _DrawerHeader(
+                ghost: racing.ghost,
+                tier: racing.tier,
+                deltaSeconds: racing.deltaSeconds,
+                distanceGapM: racing.distanceGapM,
+                paceGapSecPerKm: racing.paceGapSecPerKm,
+                reliability: racing.reliability,
+                locale: locale,
+              ),
               // Split list
               Expanded(
                 child: ListView.separated(
@@ -78,9 +86,20 @@ class _DrawerHeader extends StatelessWidget {
   final GhostPace ghost;
   final DifficultyTier tier;
   final double deltaSeconds;
+  final double distanceGapM;
+  final double paceGapSecPerKm;
+  final GhostComparisonReliability reliability;
   final AppLocale locale;
 
-  const _DrawerHeader({required this.ghost, required this.tier, required this.deltaSeconds, required this.locale});
+  const _DrawerHeader({
+    required this.ghost,
+    required this.tier,
+    required this.deltaSeconds,
+    required this.distanceGapM,
+    required this.paceGapSecPerKm,
+    required this.reliability,
+    required this.locale,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -116,12 +135,27 @@ class _DrawerHeader extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: AppTheme.s12, vertical: AppTheme.s6),
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(AppTheme.rFull),
+              borderRadius: BorderRadius.circular(AppTheme.r12),
               border: Border.all(color: color),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                if (reliability != GhostComparisonReliability.reliable)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.warning_amber_rounded, size: 14, color: AppTheme.warning),
+                      const SizedBox(width: AppTheme.s4),
+                      Text(
+                        reliability == GhostComparisonReliability.paused
+                            ? L10n.tr('paused', locale)
+                            : L10n.tr('degraded', locale),
+                        style: text.labelSmall!.copyWith(color: AppTheme.warning),
+                      ),
+                    ],
+                  ),
                 Text(
                   isAhead ? L10n.tr('ahead', locale) : L10n.tr('behind', locale),
                   style: text.labelSmall!.copyWith(color: color, fontWeight: FontWeight.w600),
@@ -129,6 +163,14 @@ class _DrawerHeader extends StatelessWidget {
                 Text(
                   '${isAhead ? '-' : '+'}${formatSeconds(deltaSeconds.abs())}',
                   style: text.titleMedium!.copyWith(color: color, fontWeight: FontWeight.w800, fontFeatures: const [FontFeature.tabularFigures()]),
+                ),
+                Text(
+                  '${distanceGapM > 0 ? '+' : ''}${distanceGapM.round()}m',
+                  style: text.bodySmall!.copyWith(color: color, fontFeatures: const [FontFeature.tabularFigures()]),
+                ),
+                Text(
+                  '${paceGapSecPerKm > 0 ? '+' : ''}${paceGapSecPerKm.round()}s/km',
+                  style: text.bodySmall!.copyWith(color: color, fontFeatures: const [FontFeature.tabularFigures()]),
                 ),
               ],
             ),

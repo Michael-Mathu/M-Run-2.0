@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mwendo_app/core/l10n/app_strings.dart';
 import 'package:mwendo_app/core/theme/app_theme.dart';
 import 'package:mwendo_app/features/learn/data/courses.dart';
-import 'package:mwendo_app/features/learn/data/legends.dart';
+
 
 class LearnPage extends ConsumerWidget {
   const LearnPage({super.key});
@@ -168,6 +168,7 @@ class _CourseCardHorizontal extends StatelessWidget {
   }
 }
 
+/*
 class _LegendCardTeaser extends StatelessWidget {
   final Legend legend;
   final AppLocale locale;
@@ -207,3 +208,4 @@ class _LegendCardTeaser extends StatelessWidget {
     );
   }
 }
+*/

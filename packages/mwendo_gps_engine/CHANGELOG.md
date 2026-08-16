@@ -1,3 +1,9 @@
+## 0.2.0
+
+* Platform parity & capture normalization across iOS and Android.
+* Emits rich `PlatformMetadata` containing HDOP, satellite count, GNSS fix type, and mock location detection flags.
+* Normalized session lifecycle events and battery management profiles.
+
 ## 0.1.2
 
 * Android: `MwendoTrackingService.startInForeground()` now wraps

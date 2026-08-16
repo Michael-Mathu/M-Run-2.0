@@ -34,7 +34,7 @@ class AppMapHud extends ConsumerWidget {
         children: [
           Expanded(
             child: _HudPill(
-              value: '${distanceKm.toStringAsFixed(2)}',
+              value: distanceKm.toStringAsFixed(2),
               unit: L10n.tr('km', locale),
               color: AppTheme.brand,
             ),

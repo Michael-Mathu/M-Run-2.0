@@ -21,6 +21,8 @@ class GpsPipeline {
   PipelineResult? process(RawFix fix);
   List<PipelineResult> reprocess(List<RawFix> fixes);
   Future<List<PipelineResult>> reprocessAsync(List<RawFix> fixes);
+  void flush();
+  void reset();
 }
 ```
 
@@ -39,6 +41,9 @@ class GpsPipeline {
 
 ##### `reprocessAsync(List<RawFix> fixes) -> Future<List<PipelineResult>>`
 * **Purpose:** Asynchronously reprocesses an activity, executing OSRM network map-matching across accepted coordinates.
+
+##### `flush() -> PipelineResult?`
+* **Purpose:** Flushes any remaining lookahead buffered point when tracking finishes or pauses.
 
 ---
 
@@ -65,6 +70,49 @@ enum FilterStatus {
   gapShort,    // Minor signal gap (10-60s)
   gapLong,     // Major signal outage (>60s)
   rejected     // Rejected by quality gate / outlier detector
+}
+```
+
+#### `enum RejectReason`
+```dart
+enum RejectReason {
+  none,
+  invalidCoordinates,
+  nonMonotonicTime,
+  mockLocation,
+  poorAccuracy,
+  excessiveSpeed,
+  threePointSpike,
+  kalmanGatingFailed,
+  stationaryDrift
+}
+```
+
+#### `enum TrackVersion`
+```dart
+enum TrackVersion {
+  deviceLive('device_live'),
+  kalmanEkf('kalman_ekf'),
+  postSessionSmoothed('post_session_smoothed'),
+  mapMatchedOsm('map_matched_osm');
+
+  final String id;
+  const TrackVersion(this.id);
+}
+```
+
+#### `enum QualityGrade`
+```dart
+enum QualityGrade {
+  excellent('A', Color(0xFF2BB673)),
+  good('B', Color(0xFF8DC63F)),
+  acceptable('C', Color(0xFFFFD15C)),
+  poor('D', Color(0xFFFF5A1F)),
+  unreliable('F', Color(0xFFE53935));
+
+  final String letter;
+  final Color color;
+  const QualityGrade(this.letter, this.color);
 }
 ```
 
@@ -103,210 +151,102 @@ class RawFix {
 }
 ```
 
-#### `class PipelineResult`
-```dart
-class PipelineResult {
-  final RawFix raw;
-  final double? smoothedLat;
-  final double? smoothedLng;
-  final FilterStatus filterStatus;
-  final String? rejectReason;
-  final double? innovationDistance;
+---
 
-  bool get isAccepted => filterStatus != FilterStatus.rejected;
+## 2. Package: `mwendo_app` Domain Models
+
+### 2.1 Class: `RunRecord`
+**Namespace:** `package:mwendo_app/data/models/run_record.dart`
+
+```dart
+class RunRecord {
+  final String id;
+  final String type;
+  final DateTime startedAt;
+  final double distanceM;
+  final int durationMs;
+  final int movingTimeMs;
+  final int calories;
+  final double elevationGainM;
+  final int avgHeartRate;
+  final int avgCadence;
+  final List<RawFix> rawFixes;
+  final List<PipelineResult> filteredResults;
+  final List<PipelineResult>? matchedResults;
+  final TrackVersion trackVersion;
+  final String? ghostId;
+  final bool? ghostWon;
+  final int? ghostRaceVersion;
+
+  /// Converts this record into an offline GhostPace to race against past personal efforts.
+  GhostPace toGhostPace({String? customName});
+}
+```
+
+### 2.2 Class: `ActivityRepository`
+**Namespace:** `package:mwendo_app/data/repositories/activity_repository.dart`
+
+```dart
+class ActivityRepository {
+  final AppDatabase _db;
+
+  ActivityRepository(this._db);
+
+  Future<List<RunRecord>> list();
+  Future<RunRecord?> get(String id);
+  Future<void> save(RunRecord run);
+  Future<void> delete(String id);
 }
 ```
 
 ---
 
-### 1.3 Class: `SessionQualityReport`
+## 3. Go Cloud REST API Reference
 
-```dart
-class SessionQualityReport {
-  final double rejectionRatePct;
-  final double medianAccuracyM;
-  final double p95AccuracyM;
-  final int jumpsPerKm;
-  final double maxImpliedSpeedMps;
-  final double rawDistanceM;
-  final double filteredDistanceM;
-  final int signalGapCount;
-  final double totalGapSeconds;
-  final double interpolatedPct;
-  final int stationaryClusterCount;
+### 3.1 `POST /api/v1/auth/login`
+* **Request:** `{"email": "runner@mwendo.app", "password": "securepassword"}`
+* **Response (200 OK):** `{"token": "JWT_BEARER_TOKEN", "user_id": "uuid"}`
 
-  static SessionQualityReport compute(List<PipelineResult> results);
+### 3.2 `POST /api/v1/activities`
+* **Headers:** `Authorization: Bearer <TOKEN>`
+* **Request Payload:**
+```json
+{
+  "name": "Morning Forest Run",
+  "started_at": "2026-08-16T06:30:00Z",
+  "distance_m": 10245.5,
+  "duration_s": 2700,
+  "moving_time_s": 2640,
+  "elevation_gain_m": 142.0,
+  "calories": 680,
+  "avg_hr": 154,
+  "points": [
+    {"lat": -1.2921, "lng": 36.8219, "ele": 1680.0, "time": "2026-08-16T06:30:00Z", "speed": 3.8}
+  ]
 }
 ```
+* **Response (201 Created):** `{"id": "activity_uuid", "status": "persisted"}`
 
----
-
-## 2. Package: `mwendo_gps_engine`
-
-### 2.1 Class: `MwendoGpsEngine`
-**Namespace:** `package:mwendo_gps_engine/mwendo_gps_engine.dart`
-
-```dart
-class MwendoGpsEngine {
-  Stream<TrackPoint> startRecording({BatteryProfile profile = BatteryProfile.standard});
-  Future<void> pause();
-  Future<void> resume();
-  Future<RecordingSummary> stop();
-  Stream<EngineState> get state;
-}
-```
-
-#### Native Platform Bindings
-* **Android Service:** `com.mwendo.mwendo_gps_engine.MwendoTrackingService` (Kotlin foreground service).
-* **iOS Plugin:** `MwendoGpsEnginePlugin.swift` (`CLLocationManager` background stream).
-
----
-
-## 3. Package: `mwendo_fit_parser`
-
-### 3.1 Class: `MwendoFitParser`
-**Namespace:** `package:mwendo_fit_parser/mwendo_fit_parser.dart`
-
-```dart
-class MwendoFitParser {
-  static final instance = MwendoFitParser._();
-  Future<void> initialize();
-  Future<FitParseResult> parseBytes(Uint8List bytes);
-}
-```
-
-#### Rust FFI Exports (`packages/mwendo_fit_parser/rust/src/lib.rs`)
-```rust
-#[no_mangle]
-pub extern "C" fn parse_fit_data(path: *const c_char) -> *mut c_char;
-
-#[no_mangle]
-pub extern "C" fn free_string(ptr: *mut c_char);
-```
-
----
-
-## 4. Client State & Database Layer (`app/lib`)
-
-### 4.1 Drift Database Schema (`app/lib/data/database/tables.dart`)
-
-```sql
--- Activities Table Schema
-CREATE TABLE activities (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    type TEXT NOT NULL DEFAULT 'Run',
-    started_at INTEGER NOT NULL,
-    ended_at INTEGER,
-    distance_m REAL NOT NULL,
-    duration_ms INTEGER NOT NULL,
-    moving_time_ms INTEGER NOT NULL,
-    calories INTEGER NOT NULL DEFAULT 0,
-    elevation_gain_m REAL NOT NULL DEFAULT 0.0,
-    avg_heart_rate INTEGER NOT NULL DEFAULT 0,
-    avg_cadence INTEGER NOT NULL DEFAULT 0
-);
-
--- Activity Points Table Schema
-CREATE TABLE activity_points (
-    activity_id TEXT NOT NULL,
-    point_index INTEGER NOT NULL,
-    lat REAL NOT NULL,
-    lng REAL NOT NULL,
-    elevation REAL NOT NULL,
-    pace REAL NOT NULL,
-    timestamp INTEGER NOT NULL,
-    accuracy INTEGER,
-    hdop REAL,
-    satellite_count INTEGER,
-    provider TEXT,
-    is_mocked INTEGER NOT NULL DEFAULT 0,
-    fix_type TEXT,
-    state TEXT,
-    PRIMARY KEY (activity_id, point_index)
-);
-```
-
----
-
-## 5. Cloud REST API Specification (`backend/cmd/api`)
-
-Base URL: `/api/v1`
-
-### Summary of Endpoints
-
-| Endpoint | Method | Auth | Description |
-| :--- | :--- | :--- | :--- |
-| `/health` | `GET` | No | Service and database health check |
-| `/auth/register` | `POST` | No | Register new runner account |
-| `/auth/login` | `POST` | No | Authenticate and obtain JWT access token |
-| `/auth/refresh` | `POST` | Cookie | Refresh expired access token |
-| `/auth/logout` | `POST` | Cookie | Invalidate refresh token |
-| `/activities` | `GET` | Bearer | List authenticated user's activities |
-| `/activities` | `POST` | Bearer | Upload and persist new activity |
-| `/activities/{id}` | `GET` | Bearer | Get activity detail with `simplify` tolerance |
-| `/leaderboard` | `GET` | No | Get global weekly ranking leaderboard |
-| `/leaderboard/submit` | `POST` | Bearer | Increment weekly distance score |
-
----
-
-### Granular Endpoint Definitions
-
-#### `POST /api/v1/auth/register`
-* **Request:**
-  ```json
-  {
-    "email": "string (valid email)",
-    "password": "string (min 8 chars)"
-  }
-  ```
-* **Status Codes:**
-  * `200 OK`: `{"status": "ok"}`
-  * `400 Bad Request`: Validation failure.
-  * `409 Conflict`: Email already exists.
-
-#### `POST /api/v1/auth/login`
-* **Request:**
-  ```json
-  {
-    "email": "runner@mwendo.app",
-    "password": "Password123"
-  }
-  ```
+### 3.3 `GET /api/v1/activities/{id}`
+* **Query Parameters:** `simplify` (optional float, tolerance in degrees/metres for `ST_Simplify`)
 * **Response (200 OK):**
-  ```json
-  {
-    "access_token": "eyJhbGciOi..."
+```json
+{
+  "id": "activity_uuid",
+  "name": "Morning Forest Run",
+  "distance_m": 10245.5,
+  "route": {
+    "type": "LineString",
+    "coordinates": [[36.8219, -1.2921], [36.8225, -1.2915]]
   }
-  ```
-* **Headers:** Sets `Set-Cookie: refresh_token=...; HttpOnly; SameSite=Lax`.
+}
+```
 
-#### `GET /api/v1/activities/{id}?simplify=1.0`
-* **Query Parameters:**
-  * `simplify` (optional, float): Douglas-Peucker simplification tolerance in metres (default: `1.0`).
+### 3.4 `GET /api/v1/leaderboard/weekly`
 * **Response (200 OK):**
-  ```json
-  {
-    "id": "c1f7b8a9e0d1",
-    "user_id": "usr_99",
-    "type": "run",
-    "started_at": "2026-08-16T06:00:00Z",
-    "ended_at": "2026-08-16T06:45:00Z",
-    "distance_m": 8450.2,
-    "moving_time_ms": 2400000,
-    "elevation_gain_m": 78.5,
-    "route": [
-      [36.8219, -1.2921],
-      [36.8230, -1.2935]
-    ],
-    "trackpoints": [
-      {
-        "lat": -1.2921,
-        "lng": 36.8219,
-        "elevation": 1680.0,
-        "speed_mps": 3.52,
-        "timestamp": "2026-08-16T06:00:00Z"
-      }
-    ]
-  }
-  ```
+```json
+[
+  {"rank": 1, "user_id": "usr_001", "total_distance_m": 75400.0},
+  {"rank": 2, "user_id": "usr_002", "total_distance_m": 68200.0}
+]
+```

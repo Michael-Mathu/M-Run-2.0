@@ -15,6 +15,7 @@ class GhostResultScreen extends ConsumerWidget {
   final String tierName;
   final bool userWon;
   final int userElapsedMs;
+  final bool recalculated;
   final String splitsJson;
   final String routePointsJson;
 
@@ -24,6 +25,7 @@ class GhostResultScreen extends ConsumerWidget {
     required this.tierName,
     required this.userWon,
     required this.userElapsedMs,
+    this.recalculated = false,
     required this.splitsJson,
     required this.routePointsJson,
   });
@@ -139,6 +141,30 @@ return Scaffold(
                   // Map overlay
                   _ResultMap(ghost: activeGhost, routePoints: routePoints),
                   const SizedBox(height: AppTheme.s24),
+
+                  if (recalculated) ...[
+                    Container(
+                      padding: const EdgeInsets.all(AppTheme.s16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warning.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(AppTheme.r16),
+                        border: Border.all(color: AppTheme.warning.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline_rounded, color: AppTheme.warning),
+                          const SizedBox(width: AppTheme.s16),
+                          Expanded(
+                            child: Text(
+                              L10n.tr('ghost_recalculated', locale),
+                              style: text.bodyMedium!.copyWith(color: cs.onSurface),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppTheme.s24),
+                  ],
 
                   // Split comparison table
                   _SplitComparisonTable(

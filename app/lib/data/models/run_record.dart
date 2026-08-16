@@ -1,10 +1,12 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:mwendo_gps_engine/mwendo_gps_engine.dart';
 import 'package:gps_pipeline/gps_pipeline.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../features/learn/data/beat_legends.dart';
 import '../sample_activities.dart';
 
 /// A completed run persisted on-device (offline-first). Replaces the
@@ -20,12 +22,21 @@ class RunRecord {
   final double elevationGainM;
   final int avgHeartRate;
   final int avgCadence;
-  // ponytail: route/elevation/pace/times are now computed dynamically from rawFixes
-  // via the GpsPipeline to support post-session reprocessing.
   final List<RawFix> rawFixes;
-  final List<PipelineResult> _pipelineResults; // Cached
+  final List<PipelineResult> filteredResults;
+  final List<PipelineResult>? matchedResults;
+  final TrackVersion trackVersion;
+  
+  final String? ghostId;
+  final bool? ghostWon;
+  final int? ghostRaceVersion;
 
-  RunRecord({
+  final List<LatLng> route;
+  final List<double> elevation;
+  final List<double> pace;
+  final List<DateTime> times;
+
+  RunRecord._({
     required this.id,
     required this.type,
     required this.startedAt,
@@ -37,28 +48,102 @@ class RunRecord {
     required this.avgHeartRate,
     required this.avgCadence,
     required this.rawFixes,
-  }) : _pipelineResults = GpsPipeline(profile: ActivityProfile.run).reprocess(rawFixes);
+    required this.filteredResults,
+    this.matchedResults,
+    required this.trackVersion,
+    this.ghostId,
+    this.ghostWon,
+    this.ghostRaceVersion,
+  }) : route = filteredResults.where((r) => r.isAccepted).map((r) => LatLng(r.smoothedLat ?? r.raw.lat, r.smoothedLng ?? r.raw.lng)).toList(),
+       elevation = filteredResults.where((r) => r.isAccepted).map((r) => r.raw.elevation).toList(),
+       pace = filteredResults.where((r) => r.isAccepted).map((r) => r.raw.speedMps > 0.3 ? 1000 / (r.raw.speedMps * 60) : 0.0).toList(),
+       times = filteredResults.where((r) => r.isAccepted).map((r) => r.raw.timestamp).toList();
 
-  List<LatLng> get route => _pipelineResults.where((r) => r.isAccepted).map((r) => LatLng(r.smoothedLat ?? r.raw.lat, r.smoothedLng ?? r.raw.lng)).toList();
-  List<double> get elevation => _pipelineResults.where((r) => r.isAccepted).map((r) => r.raw.elevation).toList();
-  List<double> get pace => _pipelineResults.where((r) => r.isAccepted).map((r) => r.raw.speedMps > 0.3 ? 1000 / (r.raw.speedMps * 60) : 0.0).toList();
-  List<DateTime> get times => _pipelineResults.where((r) => r.isAccepted).map((r) => r.raw.timestamp).toList();
+  factory RunRecord.fromFiltered({
+    required String id,
+    required String type,
+    required DateTime startedAt,
+    required double distanceM,
+    required int durationMs,
+    required int movingTimeMs,
+    required int calories,
+    required double elevationGainM,
+    required int avgHeartRate,
+    required int avgCadence,
+    required List<RawFix> rawFixes,
+    required List<PipelineResult> filteredResults,
+    List<PipelineResult>? matchedResults,
+    required TrackVersion trackVersion,
+    String? ghostId,
+    bool? ghostWon,
+    int? ghostRaceVersion,
+  }) {
+    return RunRecord._(
+      id: id,
+      type: type,
+      startedAt: startedAt,
+      distanceM: distanceM,
+      durationMs: durationMs,
+      movingTimeMs: movingTimeMs,
+      calories: calories,
+      elevationGainM: elevationGainM,
+      avgHeartRate: avgHeartRate,
+      avgCadence: avgCadence,
+      rawFixes: rawFixes,
+      filteredResults: filteredResults,
+      matchedResults: matchedResults,
+      trackVersion: trackVersion,
+      ghostId: ghostId,
+      ghostWon: ghostWon,
+      ghostRaceVersion: ghostRaceVersion,
+    );
+  }
+
+  factory RunRecord.fromLegacy({
+    required String id,
+    required String type,
+    required DateTime startedAt,
+    required double distanceM,
+    required int durationMs,
+    required int movingTimeMs,
+    required int calories,
+    required double elevationGainM,
+    required int avgHeartRate,
+    required int avgCadence,
+    required List<RawFix> rawFixes,
+  }) {
+    final fakeFiltered = rawFixes.asMap().entries.map((e) => PipelineResult(
+      raw: e.value,
+      pointIndex: e.key,
+      trackVersion: TrackVersion.deviceLive,
+      filterStatus: FilterStatus.filtered,
+      smoothedLat: e.value.lat,
+      smoothedLng: e.value.lng,
+      smoothedSpeedMps: e.value.speedMps,
+    )).toList();
+
+    return RunRecord._(
+      id: id,
+      type: type,
+      startedAt: startedAt,
+      distanceM: distanceM,
+      durationMs: durationMs,
+      movingTimeMs: movingTimeMs,
+      calories: calories,
+      elevationGainM: elevationGainM,
+      avgHeartRate: avgHeartRate,
+      avgCadence: avgCadence,
+      rawFixes: rawFixes,
+      filteredResults: fakeFiltered,
+      trackVersion: TrackVersion.deviceLive,
+    );
+  }
 
   double get avgPaceMinPerKm =>
       distanceM > 0 ? (durationMs / 60000) / (distanceM / 1000) : 0;
 
-  factory RunRecord.fromJson(Map<String, dynamic> j) => RunRecord(
-        id: j['id'],
-        type: j['type'] ?? 'Run',
-        startedAt: DateTime.parse(j['startedAt']),
-        distanceM: (j['distanceM'] ?? 0).toDouble(),
-        durationMs: j['durationMs'] ?? 0,
-        movingTimeMs: j['movingTimeMs'] ?? j['durationMs'] ?? 0,
-        calories: j['calories'] ?? 0,
-        elevationGainM: (j['elevationGainM'] ?? 0).toDouble(),
-        avgHeartRate: j['avgHeartRate'] ?? 0,
-        avgCadence: j['avgCadence'] ?? 0,
-        rawFixes: j['rawFixes'] != null
+  factory RunRecord.fromJson(Map<String, dynamic> j) {
+    final rawFixes = j['rawFixes'] != null
             ? (j['rawFixes'] as List).map((rf) => RawFix(
                   lat: (rf['lat'] as num).toDouble(),
                   lng: (rf['lng'] as num).toDouble(),
@@ -77,8 +162,40 @@ class RunRecord {
                 j['elevation'] as List?,
                 j['pace'] as List?,
                 j['times'] as List?,
-              ),
-      );
+              );
+
+    final filteredResults = j['filteredResults'] != null
+        ? (j['filteredResults'] as List).map((r) => PipelineResult.fromJson(r as Map<String, dynamic>)).toList()
+        : GpsPipeline(profile: ActivityProfile.run).reprocess(rawFixes);
+
+    final matchedResults = j['matchedResults'] != null
+        ? (j['matchedResults'] as List).map((r) => PipelineResult.fromJson(r as Map<String, dynamic>)).toList()
+        : null;
+
+    final trackVersion = j['trackVersion'] != null
+        ? TrackVersion.values.firstWhere((e) => e.id == j['trackVersion'], orElse: () => TrackVersion.deviceLive)
+        : TrackVersion.kalmanEkf;
+
+    return RunRecord._(
+        id: j['id'],
+        type: j['type'] ?? 'Run',
+        startedAt: DateTime.parse(j['startedAt']),
+        distanceM: (j['distanceM'] ?? 0).toDouble(),
+        durationMs: j['durationMs'] ?? 0,
+        movingTimeMs: j['movingTimeMs'] ?? j['durationMs'] ?? 0,
+        calories: j['calories'] ?? 0,
+        elevationGainM: (j['elevationGainM'] ?? 0).toDouble(),
+        avgHeartRate: j['avgHeartRate'] ?? 0,
+        avgCadence: j['avgCadence'] ?? 0,
+        rawFixes: rawFixes,
+        filteredResults: filteredResults,
+        matchedResults: matchedResults,
+        trackVersion: trackVersion,
+        ghostId: j['ghostId'],
+        ghostWon: j['ghostWon'],
+        ghostRaceVersion: j['ghostRaceVersion'],
+    );
+  }
 
   static List<RawFix> _synthesizeRawFixes(List? route, List? elevation, List? pace, List? times) {
     if (route == null || elevation == null || pace == null || times == null) return [];
@@ -123,6 +240,12 @@ class RunRecord {
               if (f.isMocked) 'isMocked': f.isMocked,
               if (f.fixType != 'unknown') 'fixType': f.fixType,
             }).toList(),
+        'filteredResults': filteredResults.map((r) => r.toJson()).toList(),
+        if (matchedResults != null) 'matchedResults': matchedResults!.map((r) => r.toJson()).toList(),
+        'trackVersion': trackVersion.id,
+        if (ghostId != null) 'ghostId': ghostId,
+        if (ghostWon != null) 'ghostWon': ghostWon,
+        if (ghostRaceVersion != null) 'ghostRaceVersion': ghostRaceVersion,
       };
 
   SampleActivity toSampleActivity() => SampleActivity(
@@ -141,12 +264,77 @@ class RunRecord {
         times: times,
       );
 
+  /// Converts this local run into an offline [GhostPace] allowing the user
+  /// to race against their previous personal effort.
+  GhostPace toGhostPace({String? customName}) {
+    final distKm = distanceM / 1000.0;
+    final totalSec = (durationMs / 1000).round();
+    final segCount = distKm >= 5 ? distKm.round() : (distKm * 2).clamp(1, 20).round();
+    final splitTime = segCount > 0 ? (totalSec / segCount).toDouble() : totalSec.toDouble();
+    final computedSplits = List<double>.filled(segCount > 0 ? segCount : 1, splitTime);
+
+    return GhostPace(
+      id: 'local-$id',
+      legendSlug: 'eliud-kipchoge',
+      name: customName ?? 'My Run (${distKm.toStringAsFixed(2)}km)',
+      distanceLabel: '${distKm.toStringAsFixed(1)}km',
+      distanceKm: distKm > 0 ? distKm : 1.0,
+      splits: computedSplits,
+      totalSeconds: totalSec > 0 ? totalSec : 1,
+      description: 'Personal offline recording from ${startedAt.toLocal().toString().split('.').first}',
+      accent: const Color(0xFF2BB673),
+      splitStyle: 'even',
+    );
+  }
+
+  RunRecord copyWith({
+    String? id,
+    String? type,
+    DateTime? startedAt,
+    double? distanceM,
+    int? durationMs,
+    int? movingTimeMs,
+    int? calories,
+    double? elevationGainM,
+    int? avgHeartRate,
+    int? avgCadence,
+    List<RawFix>? rawFixes,
+    List<PipelineResult>? filteredResults,
+    List<PipelineResult>? matchedResults,
+    TrackVersion? trackVersion,
+    String? ghostId,
+    bool? ghostWon,
+    int? ghostRaceVersion,
+  }) {
+    return RunRecord._(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      startedAt: startedAt ?? this.startedAt,
+      distanceM: distanceM ?? this.distanceM,
+      durationMs: durationMs ?? this.durationMs,
+      movingTimeMs: movingTimeMs ?? this.movingTimeMs,
+      calories: calories ?? this.calories,
+      elevationGainM: elevationGainM ?? this.elevationGainM,
+      avgHeartRate: avgHeartRate ?? this.avgHeartRate,
+      avgCadence: avgCadence ?? this.avgCadence,
+      rawFixes: rawFixes ?? this.rawFixes,
+      filteredResults: filteredResults ?? this.filteredResults,
+      matchedResults: matchedResults ?? this.matchedResults,
+      trackVersion: trackVersion ?? this.trackVersion,
+      ghostId: ghostId ?? this.ghostId,
+      ghostWon: ghostWon ?? this.ghostWon,
+      ghostRaceVersion: ghostRaceVersion ?? this.ghostRaceVersion,
+    );
+  }
+
   static String newId() => const Uuid().v4();
 }
 
 /// Build a [RunRecord] from a finished tracking session.
 RunRecord runRecordFromSession({
   required List<TrackPoint> trackPoints,
+  required List<PipelineResult> filteredResults,
+  required TrackVersion trackVersion,
   required double distanceM,
   required int durationMs,
   required double elevationGainM,
@@ -181,7 +369,7 @@ RunRecord runRecordFromSession({
   final startedAt = trackPoints.isNotEmpty
       ? trackPoints.first.timestamp
       : DateTime.now();
-  return RunRecord(
+  return RunRecord.fromFiltered(
     id: RunRecord.newId(),
     type: type,
     startedAt: startedAt,
@@ -193,6 +381,8 @@ RunRecord runRecordFromSession({
     avgHeartRate: avgHeartRate ?? (hrCount > 0 ? (hrSum / hrCount).round() : 0),
     avgCadence: avgCadence,
     rawFixes: rawFixes,
+    filteredResults: filteredResults,
+    trackVersion: trackVersion,
   );
 }
 

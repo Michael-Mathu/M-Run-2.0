@@ -21,15 +21,26 @@ String gpxFromRunRecord(RunRecord r) {
         '      <trkpt lat="${p.latitude}" lon="${p.longitude}">$eleXml$timeXml$speedXml</trkpt>');
   }
   final start = r.startedAt.toUtc().toIso8601String();
+  final kind = r.trackVersion.id;
+  final pipelineVersion = '1.0.0'; // To be implemented later if pipeline exposes version
+  final processedAt = r.startedAt.toUtc().toIso8601String(); // Use start time as fallback
+
   return '''
 <?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Mwendo" xmlns="http://www.topografix.com/GPX/1/1">
+<gpx version="1.1" creator="Mwendo" xmlns="http://www.topografix.com/GPX/1/1" xmlns:mwendo="https://mwendo.app/schema/v1">
   <metadata>
     <name>${_escape(r.type)}</name>
     <time>$start</time>
+    <extensions>
+      <mwendo:pipelineVersion>$pipelineVersion</mwendo:pipelineVersion>
+      <mwendo:processedAt>$processedAt</mwendo:processedAt>
+    </extensions>
   </metadata>
   <trk>
     <name>${_escape(r.type)}</name>
+    <extensions>
+      <mwendo:trackKind>$kind</mwendo:trackKind>
+    </extensions>
     <trkseg>
 $pts
     </trkseg>

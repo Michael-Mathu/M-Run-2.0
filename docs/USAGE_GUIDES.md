@@ -4,11 +4,12 @@
 
 ## 1. Scenario 1: Tracking a Run with the Resilient Engine
 
-This tutorial demonstrates how to use the Riverpod `TrackingModel` to record a workout with full crash resilience and Drift SQLite storage.
+This tutorial demonstrates how to use the Riverpod `TrackingModel` to record a workout with full crash resilience, live accuracy HUD updates, and Drift SQLite storage.
 
 ```dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gps_pipeline/gps_pipeline.dart';
 import 'package:mwendo_app/data/models/run_record.dart';
 import 'package:mwendo_app/data/repositories/activity_repository.dart';
 import 'package:mwendo_app/features/tracking/tracking_controller.dart';
@@ -28,6 +29,15 @@ class RunTrackerExample extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Live Accuracy Indicator
+            Text(
+              'GPS Accuracy: ±${trackingState.accuracy}m',
+              style: TextStyle(
+                color: trackingState.accuracy <= 10 ? Colors.green : Colors.orange,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 16),
             Text(
               '${(trackingState.distanceM / 1000).toStringAsFixed(2)} km',
               style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
@@ -79,9 +89,11 @@ class RunTrackerExample extends ConsumerWidget {
     final notifier = ref.read(trackingModelProvider.notifier);
     final state = ref.read(trackingModelProvider);
 
-    // 1. Build immutable RunRecord with full raw GPS provenance
+    // 1. Build immutable RunRecord with filtered results and provenance
     final record = runRecordFromSession(
       trackPoints: notifier.points,
+      filteredResults: notifier.filteredResults,
+      trackVersion: TrackVersion.kalmanEkf,
       distanceM: state.distanceM,
       durationMs: state.elapsedMs,
       elevationGainM: state.elevationGainM,
@@ -90,7 +102,7 @@ class RunTrackerExample extends ConsumerWidget {
     );
 
     // 2. Persist to local SQLite via Drift ActivityRepository
-    final repo = await ref.read(activityRepositoryProvider.future);
+    final repo = ref.read(activityRepositoryProvider);
     await repo.save(record);
 
     // 3. Stop hardware GPS engine and purge temporary journal snapshot
@@ -103,13 +115,14 @@ class RunTrackerExample extends ConsumerWidget {
 
 ## 2. Scenario 2: Launching a "Beat Legends" Virtual Race
 
-This tutorial explains how to arm and race against Eliud Kipchoge's Marathon World Record scaled to Bronze Difficulty (125% of WR pace).
+This tutorial explains how to arm and race against Eliud Kipchoge's Marathon World Record scaled to Bronze Difficulty (125% of WR pace), or race against your own local offline runs.
 
 ```dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mwendo_app/features/beat/ghost_race_controller.dart';
 import 'package:mwendo_app/features/learn/data/beat_legends.dart';
 import 'package:mwendo_app/features/tracking/tracking_controller.dart';
+import 'package:mwendo_app/data/models/run_record.dart';
 
 void startKipchogeGhostRace(WidgetRef ref) {
   // 1. Retrieve Legend performance profile
@@ -130,6 +143,17 @@ void startKipchogeGhostRace(WidgetRef ref) {
       print('Projected finish: ${(next.projectedFinishSeconds / 60).toStringAsFixed(1)} mins');
     }
   });
+}
+
+/// Start an offline ghost race against your own past local activity
+void startLocalActivityGhostRace(WidgetRef ref, RunRecord pastRun) {
+  // Convert local RunRecord into an offline GhostPace
+  final localGhost = pastRun.toGhostPace(customName: 'Personal Best PB');
+
+  final ghostNotifier = ref.read(ghostRaceControllerProvider.notifier);
+  ghostNotifier.arm(localGhost, DifficultyTier.goat);
+
+  ref.read(trackingModelProvider.notifier).start();
 }
 ```
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -220,17 +221,21 @@ GoRouter makeRouter(Ref ref) {
       ),
       GoRoute(
         path: '/ghost-result/:ghostId',
-        pageBuilder: (context, state) => _slidePage(
-          state,
-          GhostResultScreen(
-            ghostId: state.pathParameters['ghostId']!,
-            tierName: state.uri.queryParameters['tier'] ?? 'goat',
-            userWon: state.uri.queryParameters['won'] == 'true',
-            userElapsedMs: int.tryParse(state.uri.queryParameters['elapsedMs'] ?? '0') ?? 0,
-            splitsJson: state.uri.queryParameters['splits'] ?? '[]',
-            routePointsJson: state.uri.queryParameters['route'] ?? '[]',
-          ),
-        ),
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return _slidePage(
+            state,
+            GhostResultScreen(
+              ghostId: state.pathParameters['ghostId']!,
+              tierName: extra['tier'] as String? ?? 'goat',
+              userWon: extra['won'] as bool? ?? false,
+              userElapsedMs: extra['elapsedMs'] as int? ?? 0,
+              recalculated: extra['recalculated'] as bool? ?? false,
+              splitsJson: jsonEncode(extra['splits'] ?? []),
+              routePointsJson: jsonEncode(extra['routePoints'] ?? []),
+            ),
+          );
+        },
       ),
       GoRoute(
         path: '/onboarding',

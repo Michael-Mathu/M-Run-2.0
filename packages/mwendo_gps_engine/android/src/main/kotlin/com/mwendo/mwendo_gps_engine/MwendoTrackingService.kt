@@ -40,13 +40,7 @@ class MwendoTrackingService : Service() {
     private var listener: LocationListener? = null
 
     var activityId = ""
-    private var distanceM = 0.0
-    private var movingTimeMs = 0L
     private var startTime = 0L
-    private var lastLat = 0.0
-    private var lastLng = 0.0
-    private var lastTime = 0L
-    private var hasLast = false
     // True once the service has successfully entered the foreground. If this
     // stays false the run must not be treated as recording (see onStartCommand).
     var foregroundReady = false
@@ -77,10 +71,7 @@ class MwendoTrackingService : Service() {
 
     fun start(profile: String) {
         activityId = UUID.randomUUID().toString()
-        distanceM = 0.0
-        movingTimeMs = 0
         startTime = System.currentTimeMillis()
-        lastTime = startTime
 
         val interval = when (profile) {
             "powerSaver" -> 20000L
@@ -102,10 +93,6 @@ class MwendoTrackingService : Service() {
     }
 
     fun resume() {
-        // Re-seed the last-fix anchor so the paused duration isn't counted as
-        // moving time on the first fix after resume.
-        lastTime = System.currentTimeMillis()
-        hasLast = false
         val request = LocationRequest.Builder(5000L)
             .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
             .build()
@@ -156,9 +143,7 @@ class MwendoTrackingService : Service() {
         val duration = (System.currentTimeMillis() - startTime).toInt()
         return mapOf(
             "activity_id" to activityId,
-            "distance_m" to distanceM,
             "duration_ms" to duration,
-            "moving_time_ms" to movingTimeMs,
         )
     }
 
@@ -168,47 +153,29 @@ class MwendoTrackingService : Service() {
 
     private fun processLocation(location: Location) {
         val speedMps = maxOf(0.0, location.speed.toDouble())
-        val state = classifyState(speedMps)
         
-        if (location.accuracy > 20f || location.accuracy == 0f) return
-        
-        if (hasLast) {
-            val d = FloatArray(1)
-            Location.distanceBetween(lastLat, lastLng, location.latitude, location.longitude, d)
-            
-            if (speedMps >= 0.3 && d[0] >= 2.0) {
-                distanceM += d[0]
-                if (state == "run" || state == "walk") {
-                    val gap = location.time - lastTime
-                    if (gap > 0 && gap < 60_000) movingTimeMs += gap
-                }
-            }
-        }
-        lastLat = location.latitude
-        lastLng = location.longitude
-        lastTime = location.time
-        hasLast = true
         try {
             listener?.onLocation(
                 mapOf(
                     "lat" to location.latitude,
                     "lng" to location.longitude,
                     "elevation" to location.altitude,
-                    "timestamp" to location.time.toLong(),
-                    "speed_mps" to speedMps,
-                    "accuracy" to (location.accuracy?.toInt() ?: 0),
-                    "state" to state,
+                    "timestamp" to location.time,
+                    "speed" to speedMps,
+                    "accuracy" to location.accuracy.toDouble(),
+                    "verticalAccuracy" to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && location.hasVerticalAccuracy()) location.verticalAccuracyMeters.toDouble() else null,
+                    "hdop" to null, // Android Location API doesn't expose HDOP directly
+                    "satelliteCount" to location.extras?.getInt("satellites"),
+                    "provider" to location.provider,
+                    "isMocked" to location.isFromMockProvider,
+                    "fixType" to "unknown", // Not exposed directly
+                    "bearing" to if (location.hasBearing()) location.bearing.toDouble() else null,
+                    "bearingAccuracy" to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && location.hasBearingAccuracy()) location.bearingAccuracyDegrees.toDouble() else null,
                 ),
             )
         } catch (e: Exception) {
             e.printStackTrace()
         }
-    }
-
-    private fun classifyState(speed: Double): String = when {
-        speed < 0.8 -> "idle"
-        speed < 5.0 -> "walk"
-        else -> "run"
     }
 
     private fun startInForeground(): Boolean {

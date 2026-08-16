@@ -24,9 +24,51 @@ class Activities extends Table {
   RealColumn get elevationGainM => real().named('elevation_gain_m').withDefault(const Constant(0.0))();
   IntColumn get avgHeartRate => integer().withDefault(const Constant(0))();
   IntColumn get avgCadence => integer().withDefault(const Constant(0))();
+  TextColumn get metricSource => text().named('metric_source').withDefault(const Constant('filtered'))();
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('SessionDraftEntity')
+class SessionDrafts extends Table {
+  TextColumn get id => text()();
+  TextColumn get status => text()();
+  TextColumn get filterVersion => text().named('filter_version')();
+  RealColumn get distanceM => real().named('distance_m').withDefault(const Constant(0.0))();
+  IntColumn get durationMs => integer().named('duration_ms').withDefault(const Constant(0))();
+  IntColumn get movingTimeMs => integer().named('moving_time_ms').withDefault(const Constant(0))();
+  RealColumn get elevationGainM => real().named('elevation_gain_m').withDefault(const Constant(0.0))();
+  IntColumn get calories => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().named('created_at')();
+  DateTimeColumn get finalizedAt => dateTime().named('finalized_at').nullable()();
+  IntColumn get schemaVersion => integer().named('schema_version')();
+  
+  TextColumn get matchStatus => text().named('match_status').nullable()();
+  RealColumn get matchedDistanceM => real().named('matched_distance_m').nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class SessionPoints extends Table {
+  TextColumn get draftId => text().named('draft_id')();
+  IntColumn get seq => integer()();
+  TextColumn get kind => text()();
+  RealColumn get lat => real()();
+  RealColumn get lng => real()();
+  RealColumn get elevation => real()();
+  DateTimeColumn get timestamp => dateTime()();
+  IntColumn get accuracy => integer()();
+  RealColumn get hdop => real().nullable()();
+  RealColumn get speedMps => real().named('speed_mps')();
+  TextColumn get rejectReason => text().named('reject_reason').nullable()();
+  TextColumn get filterStatus => text().named('filter_status').nullable()();
+  RealColumn get smoothedLat => real().named('smoothed_lat').nullable()();
+  RealColumn get smoothedLng => real().named('smoothed_lng').nullable()();
+
+  @override
+  Set<Column> get primaryKey => {draftId, seq};
 }
 
 class ActivityPoints extends Table {

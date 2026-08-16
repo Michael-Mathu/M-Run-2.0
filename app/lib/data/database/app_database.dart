@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:gps_pipeline/gps_pipeline.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'connection/connection.dart' as impl;
 import 'tables.dart';
@@ -7,14 +8,16 @@ import '../models/run_record.dart';
 
 part 'app_database.g.dart';
 
-@DriftDatabase(tables: [Users, Activities, ActivityPoints])
+final appDatabaseProvider = Provider<AppDatabase>((ref) => AppDatabase());
+
+@DriftDatabase(tables: [Users, Activities, ActivityPoints, SessionDrafts, SessionPoints])
 class AppDatabase extends _$AppDatabase {
   AppDatabase._() : super(impl.connect());
   static AppDatabase? _instance;
   factory AppDatabase() => _instance ??= AppDatabase._();
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -30,6 +33,11 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(activityPoints, activityPoints.isMocked);
             await m.addColumn(activityPoints, activityPoints.fixType);
             await m.addColumn(activityPoints, activityPoints.state);
+          }
+          if (from < 3) {
+            await m.addColumn(activities, activities.metricSource);
+            await m.createTable(sessionDrafts);
+            await m.createTable(sessionPoints);
           }
         },
       );
@@ -54,7 +62,7 @@ class AppDatabase extends _$AppDatabase {
 
   RunRecord _runRecordFromActivity(Activity activity, List<ActivityPoint> points) {
     final pts = points.toList(growable: false);
-    return RunRecord(
+    return RunRecord.fromLegacy(
       id: activity.id,
       type: activity.type,
       startedAt: activity.startedAt,

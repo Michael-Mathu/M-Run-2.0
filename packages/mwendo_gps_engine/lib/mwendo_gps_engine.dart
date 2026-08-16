@@ -34,4 +34,8 @@ class MwendoGpsEngine {
   Stream<EngineState> get state {
     return MwendoGpsEnginePlatform.instance.state;
   }
+
+  Future<EnginePlatformMetadata> getPlatformMetadata() {
+    return MwendoGpsEnginePlatform.instance.getPlatformMetadata();
+  }
 }

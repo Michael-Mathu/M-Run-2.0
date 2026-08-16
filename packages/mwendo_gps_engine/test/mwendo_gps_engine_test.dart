@@ -28,6 +28,15 @@ class MockMwendoGpsEnginePlatform
       );
 
   @override
+  Future<EnginePlatformMetadata> getPlatformMetadata() => Future.value(
+        EnginePlatformMetadata(
+          osVersion: 'unknown',
+          hardwareModel: 'unknown',
+          appVersion: 'unknown',
+        ),
+      );
+
+  @override
   Stream<EngineState> get state => const Stream.empty();
 }
 

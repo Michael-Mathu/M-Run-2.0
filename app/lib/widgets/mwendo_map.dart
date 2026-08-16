@@ -176,15 +176,13 @@ class _MwendoMapState extends State<MwendoMap> {
     final routePoints = widget.points;
     if (routePoints.length < 2) return;
 
-    if (_ghostLine == null) {
-      _ghostLine = await ctrl.addLine(LineOptions(
+    _ghostLine ??= await ctrl.addLine(LineOptions(
         geometry: _toMlLatLngList(routePoints),
         lineColor: _kGhostRouteColor,
         lineWidth: _kGhostRouteWidth,
         lineOpacity: _kGhostRouteOpacity,
         linePattern: 'dash',
       ));
-    }
 
     final ghostPos = computeGhostPosition(
       ghost,
@@ -219,6 +217,14 @@ class _MwendoMapState extends State<MwendoMap> {
     }
     if (!_isLive || !_autoFollow) return MyLocationTrackingMode.none;
     return MyLocationTrackingMode.tracking;
+  }
+
+  void _toggleAutoFollow() {
+    if (_autoFollow) {
+      setState(() => _autoFollow = false);
+    } else {
+      _recenter();
+    }
   }
 
   void _recenter() {
@@ -302,42 +308,55 @@ class _MwendoMapState extends State<MwendoMap> {
           ),
         Positioned(
           right: AppTheme.s16,
-          bottom: (_isLive && !_autoFollow) ? 72 : AppTheme.s16,
+          bottom: _isLive ? 72 : AppTheme.s16,
           child: _ZoomControls(
             onIn: () => _ctrl?.animateCamera(CameraUpdate.zoomIn()),
             onOut: () => _ctrl?.animateCamera(CameraUpdate.zoomOut()),
           ),
         ),
-        if (_isLive && !_autoFollow)
+        if (_isLive)
           Positioned(
             right: AppTheme.s16,
             bottom: AppTheme.s16,
-            child: _RecenterButton(onTap: _recenter),
+            child: _AutoFollowToggleButton(
+              isFollowing: _autoFollow,
+              onTap: _toggleAutoFollow,
+            ),
           ),
       ],
     );
   }
 }
 
-class _RecenterButton extends StatelessWidget {
+class _AutoFollowToggleButton extends StatelessWidget {
+  final bool isFollowing;
   final VoidCallback onTap;
-  const _RecenterButton({required this.onTap});
+  const _AutoFollowToggleButton({
+    required this.isFollowing,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: 'Re-center map',
+      label: isFollowing ? 'Disable map auto-follow' : 'Enable map auto-follow',
       child: Material(
-        color: Colors.black.withValues(alpha: 0.55),
+        color: isFollowing
+            ? const Color(0xFFFF5A1F) // Active accent
+            : Colors.black.withValues(alpha: 0.65),
         shape: const CircleBorder(),
         elevation: 4,
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
-          child: const Padding(
-            padding: EdgeInsets.all(14),
-            child: Icon(Icons.my_location_rounded, color: Colors.white, size: 22),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Icon(
+              isFollowing ? Icons.gps_fixed_rounded : Icons.gps_not_fixed_rounded,
+              color: isFollowing ? Colors.white : Colors.white70,
+              size: 22,
+            ),
           ),
         ),
       ),

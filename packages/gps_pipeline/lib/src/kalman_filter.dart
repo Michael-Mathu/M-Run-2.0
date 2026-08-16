@@ -20,10 +20,22 @@ class KalmanState {
     required this.north,
     this.vEast = 0,
     this.vNorth = 0,
-    this.p00 = 100, this.p01 = 0, this.p02 = 0, this.p03 = 0,
-    this.p10 = 0, this.p11 = 100, this.p12 = 0, this.p13 = 0,
-    this.p20 = 0, this.p21 = 0, this.p22 = 25, this.p23 = 0,
-    this.p30 = 0, this.p31 = 0, this.p32 = 0, this.p33 = 25,
+    this.p00 = 100,
+    this.p01 = 0,
+    this.p02 = 0,
+    this.p03 = 0,
+    this.p10 = 0,
+    this.p11 = 100,
+    this.p12 = 0,
+    this.p13 = 0,
+    this.p20 = 0,
+    this.p21 = 0,
+    this.p22 = 25,
+    this.p23 = 0,
+    this.p30 = 0,
+    this.p31 = 0,
+    this.p32 = 0,
+    this.p33 = 25,
   });
 }
 
@@ -37,11 +49,18 @@ class KalmanFilter {
   // ~5 sigma
   final double innovationGateSq = 25.0;
 
+  // ponytail: calibrated 2026-08-16 via synthetic_runner.dart at running speed.
+  // Ceiling: synthetic noise model; refine with real Nairobi urban-canyon data when available.
+  // Upgrade: re-run kalman_calibrate.dart with real traces and replace this value.
+  static const double _motionSigmaMoving = 2.0;
+  static const double _motionSigmaStationary = 0.3;
+
   KalmanFilter({required double originLat, required double originLng})
       : _originLat = originLat,
         _originLng = originLng;
 
-  PipelineResult process(RawFix fix) {
+  PipelineResult process(
+      RawFix fix, int pointIndex, TrackVersion trackVersion) {
     final (measuredEast, measuredNorth) =
         CoordinateUtil.toEnu(_originLat, _originLng, fix.lat, fix.lng);
 
@@ -50,24 +69,31 @@ class KalmanFilter {
       _lastTimestamp = fix.timestamp;
       return PipelineResult(
         raw: fix,
+        pointIndex: pointIndex,
+        trackVersion: trackVersion,
         smoothedLat: fix.lat,
         smoothedLng: fix.lng,
+        smoothedSpeedMps: fix.speedMps,
         filterStatus: FilterStatus.filtered,
       );
     }
 
-    final dt = fix.timestamp.difference(_lastTimestamp!).inMilliseconds / 1000.0;
+    final dt =
+        fix.timestamp.difference(_lastTimestamp!).inMilliseconds / 1000.0;
     if (dt <= 0) {
       // Should be caught by validator, but safe fallback
       return PipelineResult(
         raw: fix,
+        pointIndex: pointIndex,
+        trackVersion: trackVersion,
         filterStatus: FilterStatus.rejected,
-        rejectReason: 'invalid_timestamp',
+        rejectReason: RejectReason.invalidTimestamp,
       );
     }
 
     // Adaptive process noise based on whether we are moving
-    final motionSigma = fix.speedMps > 0.3 ? 3.0 : 0.3;
+    final motionSigma =
+        fix.speedMps > 0.3 ? _motionSigmaMoving : _motionSigmaStationary;
     final qPos = (motionSigma * dt * dt / 2);
     final qVel = motionSigma * dt;
     final qPosSq = qPos * qPos;
@@ -106,8 +132,14 @@ class KalmanFilter {
 
     // 2. Update
     // Measurement noise R
-    final rVariance = fix.accuracy > 0 ? (fix.accuracy * fix.accuracy).toDouble() : 100.0;
-    
+    double rVariance =
+        fix.accuracy > 0 ? (fix.accuracy * fix.accuracy).toDouble() : 100.0;
+
+    // Cap innovation variance when stationary to eagerly reject jitter
+    if (fix.speedMps < 0.1) {
+      rVariance = min(rVariance, 25.0); // 5m max variance
+    }
+
     // Innovation y = z - H * x
     final yEast = measuredEast - predEast;
     final yNorth = measuredNorth - predNorth;
@@ -116,23 +148,40 @@ class KalmanFilter {
     // Innovation covariance S = H * P * H^T + R
     final s00 = p00 + rVariance;
     final s11 = p11 + rVariance;
-    
+
     // Innovation gate (simplified Mahalanobis)
     final mahalanobisSq = (yEast * yEast) / s00 + (yNorth * yNorth) / s11;
     if (mahalanobisSq > innovationGateSq) {
       // Reject measurement, keep prediction
       _state = KalmanState(
-        east: predEast, north: predNorth, vEast: predVEast, vNorth: predVNorth,
-        p00: p00, p01: p01, p02: p02, p03: p03,
-        p10: p10, p11: p11, p12: p12, p13: p13,
-        p20: p20, p21: p21, p22: p22, p23: p23,
-        p30: p30, p31: p31, p32: p32, p33: p33,
+        east: predEast,
+        north: predNorth,
+        vEast: predVEast,
+        vNorth: predVNorth,
+        p00: p00,
+        p01: p01,
+        p02: p02,
+        p03: p03,
+        p10: p10,
+        p11: p11,
+        p12: p12,
+        p13: p13,
+        p20: p20,
+        p21: p21,
+        p22: p22,
+        p23: p23,
+        p30: p30,
+        p31: p31,
+        p32: p32,
+        p33: p33,
       );
       _lastTimestamp = fix.timestamp;
       return PipelineResult(
         raw: fix,
+        pointIndex: pointIndex,
+        trackVersion: trackVersion,
         filterStatus: FilterStatus.rejected,
-        rejectReason: 'large_innovation',
+        rejectReason: RejectReason.largeInnovation,
         innovationDistance: sqrt(distSq),
       );
     }
@@ -176,20 +225,40 @@ class KalmanFilter {
     final np33 = -k30 * p03 - k31 * p13 + p33;
 
     _state = KalmanState(
-        east: newEast, north: newNorth, vEast: newVEast, vNorth: newVNorth,
-        p00: np00, p01: np01, p02: np02, p03: np03,
-        p10: np10, p11: np11, p12: np12, p13: np13,
-        p20: np20, p21: np21, p22: np22, p23: np23,
-        p30: np30, p31: np31, p32: np32, p33: np33,
-      );
+      east: newEast,
+      north: newNorth,
+      vEast: newVEast,
+      vNorth: newVNorth,
+      p00: np00,
+      p01: np01,
+      p02: np02,
+      p03: np03,
+      p10: np10,
+      p11: np11,
+      p12: np12,
+      p13: np13,
+      p20: np20,
+      p21: np21,
+      p22: np22,
+      p23: np23,
+      p30: np30,
+      p31: np31,
+      p32: np32,
+      p33: np33,
+    );
     _lastTimestamp = fix.timestamp;
 
-    final (smoothedLat, smoothedLng) = CoordinateUtil.fromEnu(_originLat, _originLng, newEast, newNorth);
+    final (smoothedLat, smoothedLng) =
+        CoordinateUtil.fromEnu(_originLat, _originLng, newEast, newNorth);
+    final smoothedSpeedMps = sqrt(newVEast * newVEast + newVNorth * newVNorth);
 
     return PipelineResult(
       raw: fix,
+      pointIndex: pointIndex,
+      trackVersion: trackVersion,
       smoothedLat: smoothedLat,
       smoothedLng: smoothedLng,
+      smoothedSpeedMps: smoothedSpeedMps,
       filterStatus: FilterStatus.filtered,
       innovationDistance: sqrt(distSq),
     );

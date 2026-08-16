@@ -29,21 +29,12 @@ class MethodChannelMwendoGpsEngine extends MwendoGpsEnginePlatform {
   void _onTrackpointEvent(dynamic event) {
     if (event is! Map) return;
     final Map<dynamic, dynamic> data = event;
+    final rawFix = NormalizedFix.fromMap(data);
     _trackpointController.add(TrackPoint(
-      lat: (data['lat'] as num).toDouble(),
-      lng: (data['lng'] as num).toDouble(),
-      elevation: (data['elevation'] as num?)?.toDouble() ?? 0.0,
-      timestamp: DateTime.fromMillisecondsSinceEpoch((data['timestamp'] as num).toInt()),
-      speedMps: (data['speed_mps'] as num?)?.toDouble() ?? 0.0,
+      raw: rawFix,
       heartRate: data['heart_rate'] as int?,
       cadence: data['cadence'] as int?,
-      accuracy: (data['accuracy'] as num?)?.toInt() ?? 0,
       state: data['state'] as String? ?? 'idle',
-      hdop: (data['hdop'] as num?)?.toDouble(),
-      satelliteCount: data['satellite_count'] as int?,
-      provider: data['provider'] as String?,
-      isMocked: data['is_mocked'] as bool? ?? false,
-      fixType: data['fix_type'] as String? ?? 'unknown',
     ));
   }
 
@@ -83,4 +74,14 @@ class MethodChannelMwendoGpsEngine extends MwendoGpsEnginePlatform {
 
   @override
   Stream<EngineState> get state => _stateController.stream;
+
+  @override
+  Future<EnginePlatformMetadata> getPlatformMetadata() async {
+    final result = await methodChannel.invokeMethod<Map>('getPlatformMetadata');
+    return EnginePlatformMetadata(
+      osVersion: result?['osVersion'] as String? ?? 'unknown',
+      hardwareModel: result?['hardwareModel'] as String? ?? 'unknown',
+      appVersion: result?['appVersion'] as String? ?? 'unknown',
+    );
+  }
 }

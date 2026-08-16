@@ -11,10 +11,16 @@ enum GhostRaceState {
   finished,
 }
 
-/// Result of a completed ghost race.
 enum GhostRaceResult {
   win,
   loss,
+}
+
+/// Reliability of the ghost comparison based on GPS quality.
+enum GhostComparisonReliability {
+  reliable,
+  degraded,
+  paused,
 }
 
 /// Controller for managing ghost race state and live computations.
@@ -59,13 +65,31 @@ class GhostRaceController extends Notifier<GhostRaceStateData> {
     final delta = (userElapsedMs / 1000) - ghostElapsedAtDist;
     final projectedFinish = ghostProjectedFinishTime(racing.ghost, userDistanceM, userElapsedMs);
 
+    final userPace = userDistanceM > 0 ? (userElapsedMs / 1000) / (userDistanceM / 1000) : 0.0;
+    final ghostPace = userDistanceM > 0 ? ghostElapsedAtDist / (userDistanceM / 1000) : 0.0;
+    final paceGap = userDistanceM > 0 ? userPace - ghostPace : 0.0;
+
+    // Approximate distance gap using ghost's current pace
+    final ghostCurrentPaceMps = racing.ghost.distanceKm * 1000 / racing.ghost.totalSeconds;
+    final distanceGap = -delta * ghostCurrentPaceMps;
+
     state = racing.copyWith(
       splitComparisons: result.$1,
       ghostPosition: ghostPos,
       deltaSeconds: delta,
       projectedFinishSeconds: projectedFinish,
       currentSplitIndex: result.$2,
+      distanceGapM: distanceGap,
+      paceGapSecPerKm: paceGap,
     );
+  }
+
+  /// Sets the reliability of the ghost comparison (based on GPS signal).
+  void setReliability(GhostComparisonReliability reliability) {
+    if (state is! GhostRaceRacingData) return;
+    final racing = state as GhostRaceRacingData;
+    if (racing.reliability == reliability) return;
+    state = racing.copyWith(reliability: reliability);
   }
 
   /// Finishes the race and records result.
@@ -185,7 +209,6 @@ sealed class GhostRaceStateData {
       case GhostRaceFinishedData():
         return finished?.call(this as GhostRaceFinishedData);
     }
-    return null;
   }
 }
 
@@ -207,6 +230,9 @@ class GhostRaceRacingData extends GhostRaceStateData {
   final double deltaSeconds; // user - ghost (negative = user ahead)
   final double projectedFinishSeconds;
   final int currentSplitIndex;
+  final GhostComparisonReliability reliability;
+  final double distanceGapM; // positive = user ahead
+  final double paceGapSecPerKm; // negative = user faster
 
   const GhostRaceRacingData({
     required this.ghost,
@@ -216,6 +242,9 @@ class GhostRaceRacingData extends GhostRaceStateData {
     this.deltaSeconds = 0,
     this.projectedFinishSeconds = 0,
     this.currentSplitIndex = 0,
+    this.reliability = GhostComparisonReliability.reliable,
+    this.distanceGapM = 0,
+    this.paceGapSecPerKm = 0,
   });
 
   GhostRaceRacingData copyWith({
@@ -224,6 +253,9 @@ class GhostRaceRacingData extends GhostRaceStateData {
     double? deltaSeconds,
     double? projectedFinishSeconds,
     int? currentSplitIndex,
+    GhostComparisonReliability? reliability,
+    double? distanceGapM,
+    double? paceGapSecPerKm,
   }) => GhostRaceRacingData(
         ghost: ghost,
         tier: tier,
@@ -232,6 +264,9 @@ class GhostRaceRacingData extends GhostRaceStateData {
         deltaSeconds: deltaSeconds ?? this.deltaSeconds,
         projectedFinishSeconds: projectedFinishSeconds ?? this.projectedFinishSeconds,
         currentSplitIndex: currentSplitIndex ?? this.currentSplitIndex,
+        reliability: reliability ?? this.reliability,
+        distanceGapM: distanceGapM ?? this.distanceGapM,
+        paceGapSecPerKm: paceGapSecPerKm ?? this.paceGapSecPerKm,
       );
 }
 

@@ -10,7 +10,7 @@ Mwendo is engineered as an offline-first, reactive sports telemetry and geospati
 |                                                                               |
 |  +--------------------+   +---------------------+   +----------------------+  |
 |  | Live Tracking UI   |   | Beat Legends Ghost  |   | Drift SQLite Storage |  |
-|  | (MapLibre + HUD)   |   | Pacing Engine       |   | (Activities/Points)  |  |
+|  | (MapLibre + HUD)   |   | Pacing Engine       |   | (Activities/Drafts)  |  |
 |  +---------▲----------+   +----------▲----------+   +----------▲-----------+  |
 |            │                         │                         │              |
 |  +---------┴─────────────────────────┴─────────────────────────┴------------+  |
@@ -114,24 +114,24 @@ Eliminates GPS drift when runners pause at traffic lights. Uses a 4-state automa
 * Flags extended outages ($\Delta t > 60\text{s}$) as `FilterStatus.gapLong`, prompting an internal Kalman covariance reinitialization.
 
 ### Stage 7: Map Matcher (`MapMatcher`)
-Post-session batch processing that streams accepted polyline chunks (up to 90 points per request) to OSRM `/match/v1/foot` endpoints, snapping noisy urban tracks to known OpenStreetMap pedestrian ways.
+Post-session batch processing that streams accepted polyline chunks (up to 90 points per request) to OSRM `/match/v1/foot` endpoints, snapping noisy urban tracks to known OpenStreetMap pedestrian ways and recalculating verified distance metrics.
 
 ---
 
 ## 3. Crash Recovery & Persistence Architecture
 
-Mwendo employs a two-tier offline-first storage hierarchy:
+Mwendo employs a durable, offline-first SQLite relational database via Drift:
 
-1. **Active Run Recovery Journal (`mwendo_recovery.json`)**:
-   * Every 10 fixes and upon every `pause()`, a serialized snapshot containing elapsed time, moving time, elevation gain, and raw telemetry fixes is written atomically to system temporary storage.
-   * On application cold start, `hasRecoverableRun()` checks for unfinished sessions. If found, the run is restored into the `AppEngineState.recovering` state, awaiting user resumption without risking premature GPS permission requests.
-2. **Local Relational Storage (`Drift` / SQLite)**:
-   * Completed runs are stored in local SQLite database tables (`Users`, `Activities`, `ActivityPoints`).
-   * Full raw telemetry fixes are stored with GPS metadata (accuracy, HDOP, satellite count, mock status, and filter state).
+1. **Active Session Drafts & Point Journaling (`SessionDrafts` & `SessionPoints`)**:
+   * Every received GPS fix is synchronously journaled to the `session_points` Drift table.
+   * On cold start, `AppDatabase.hasUnfinishedDraft()` detects interrupted sessions, allowing seamless recovery in `AppEngineState.recovering` mode.
+2. **Completed Activities (`Activities` & `ActivityPoints`)**:
+   * Completed runs are stored in relational tables with full raw fixes and filtered results.
+   * `ActivityRepository` exposes async CRUD operations directly to Riverpod providers without legacy JSON dependencies.
 
 ---
 
-## 4. "Beat Legends" Virtual Pacing Engine
+## 4. "Beat Legends" Virtual Pacing & Offline Ghost Racing
 
 The ghost racing engine simulates legendary performances using dynamic split projection:
 
@@ -140,6 +140,8 @@ The ghost racing engine simulates legendary performances using dynamic split pro
   * Silver: $110\%$ of WR
   * Gold: $102\%$ of WR
   * G.O.A.T.: $100\%$ of WR
+* **Offline Local Ghost Races**:
+  * Users can convert any previously saved `RunRecord` into an offline `GhostPace` using `record.toGhostPace()`, allowing them to race against their personal efforts without internet access.
 * **Split Styles**: Mathematical split progression models:
   * *Even*: Stable pace across segments.
   * *Negative*: Progressive acceleration ($\text{factor} = 1.12 - 0.24t$).

@@ -14,9 +14,7 @@ void main() {
       if (methodCall.method == 'stop') {
         return {
           'activity_id': 'a',
-          'distance_m': 1.0,
           'duration_ms': 2,
-          'moving_time_ms': 3,
         };
       }
       return null;
@@ -31,6 +29,6 @@ void main() {
   test('stop returns a RecordingSummary', () async {
     final summary = await platform.stop();
     expect(summary.activityId, 'a');
-    expect(summary.distanceM, 1.0);
+    expect(summary.durationMs, 2);
   });
 }

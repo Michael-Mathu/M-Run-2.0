@@ -205,7 +205,7 @@ class _SplitTable extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: splits.length,
-            separatorBuilder: (_, __) => Divider(height: 1, color: cs.onSurface.withValues(alpha: 0.1)),
+            separatorBuilder: (_, _) => Divider(height: 1, color: cs.onSurface.withValues(alpha: 0.1)),
             itemBuilder: (_, i) {
               final splitSec = splits[i];
               final paceMinPerKm = splitSec / 60 / (ghost.distanceKm / splits.length);

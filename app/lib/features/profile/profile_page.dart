@@ -767,7 +767,7 @@ class _ThemeSwatch extends StatelessWidget {
 
 Future<void> _exportData(
     BuildContext context, WidgetRef ref, AppLocale locale) async {
-  final repo = await ref.read(activityRepositoryProvider.future);
+  final repo = ref.read(activityRepositoryProvider);
   final runs = await repo.list();
   if (runs.isEmpty) {
     if (context.mounted) {

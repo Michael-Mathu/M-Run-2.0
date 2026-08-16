@@ -31,12 +31,12 @@ class AppButton extends StatelessWidget {
     double? height,
   }) => AppButton(
         key: key,
-        child: child,
         onPressed: onPressed,
         style: AppButtonStyle.primary,
         padding: padding,
         width: width,
         height: height,
+        child: child,
       );
 
   factory AppButton.secondary({
@@ -48,12 +48,12 @@ class AppButton extends StatelessWidget {
     double? height,
   }) => AppButton(
         key: key,
-        child: child,
         onPressed: onPressed,
         style: AppButtonStyle.secondary,
         padding: padding,
         width: width,
         height: height,
+        child: child,
       );
 
   factory AppButton.ghost({
@@ -65,12 +65,12 @@ class AppButton extends StatelessWidget {
     double? height,
   }) => AppButton(
         key: key,
-        child: child,
         onPressed: onPressed,
         style: AppButtonStyle.ghost,
         padding: padding,
         width: width,
         height: height,
+        child: child,
       );
 
   factory AppButton.destructive({
@@ -82,12 +82,12 @@ class AppButton extends StatelessWidget {
     double? height,
   }) => AppButton(
         key: key,
-        child: child,
         onPressed: onPressed,
         style: AppButtonStyle.destructive,
         padding: padding,
         width: width,
         height: height,
+        child: child,
       );
 
   @override

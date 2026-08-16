@@ -6,8 +6,10 @@
 // we extract the pure logic of the filter to test it directly.
 // (Alternatively, we can instantiate TrackingModel if we mock the engine, but plain asserts are cleaner).
 
+import 'package:flutter/foundation.dart';
+
 void main() {
-  print("Running Tracking Filter check...");
+  debugPrint("Running Tracking Filter check...");
   
   // 1. Stationary Drift: Speed < 0.3 should be discarded
   assert(_shouldKeep(speedMps: 0.1, accuracy: 5.0, distM: 10.0) == false, "Stationary points should be dropped");
@@ -22,7 +24,7 @@ void main() {
   // 4. Movement Re-entry: High accuracy, good speed, sufficient distance
   assert(_shouldKeep(speedMps: 1.5, accuracy: 5.0, distM: 3.5) == true, "Valid movement should be kept");
   
-  print("All tracking filter invariants hold.");
+  debugPrint("All tracking filter invariants hold.");
 }
 
 bool _shouldKeep({required double speedMps, required double accuracy, required double distM}) {

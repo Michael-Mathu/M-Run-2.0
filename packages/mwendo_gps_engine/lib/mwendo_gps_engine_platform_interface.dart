@@ -1,42 +1,38 @@
 import 'dart:async';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'mwendo_gps_engine_method_channel.dart';
+import 'src/normalized_fix.dart';
+
+export 'src/normalized_fix.dart';
 
 enum BatteryProfile { standard, powerSaver, ultraSaver }
 enum EngineState { idle, recording, paused, recovering }
 
 class TrackPoint {
-  final double lat;
-  final double lng;
-  final double elevation;
-  final DateTime timestamp;
-  final double speedMps;
+  final NormalizedFix raw;
   final int? heartRate;
   final int? cadence;
-  final int accuracy;
   final String state;
-  final double? hdop;
-  final int? satelliteCount;
-  final String? provider;
-  final bool isMocked;
-  final String fixType;
 
   TrackPoint({
-    required this.lat,
-    required this.lng,
-    required this.elevation,
-    required this.timestamp,
-    required this.speedMps,
+    required this.raw,
     this.heartRate,
     this.cadence,
-    required this.accuracy,
     required this.state,
-    this.hdop,
-    this.satelliteCount,
-    this.provider,
-    this.isMocked = false,
-    this.fixType = 'unknown',
   });
+  
+  // Forwarders for backward compatibility
+  double get lat => raw.lat;
+  double get lng => raw.lng;
+  double get elevation => raw.elevation;
+  DateTime get timestamp => raw.timestamp;
+  double get speedMps => raw.speedMps;
+  int get accuracy => raw.accuracyM.toInt();
+  double? get hdop => raw.hdop;
+  int? get satelliteCount => raw.satelliteCount;
+  String get provider => raw.provider;
+  bool get isMocked => raw.isMocked;
+  String get fixType => raw.fixType;
 }
 
 class RecordingSummary {
@@ -50,6 +46,18 @@ class RecordingSummary {
     required this.distanceM,
     required this.durationMs,
     required this.movingTimeMs,
+  });
+}
+
+class EnginePlatformMetadata {
+  final String osVersion;
+  final String hardwareModel;
+  final String appVersion;
+
+  EnginePlatformMetadata({
+    required this.osVersion,
+    required this.hardwareModel,
+    required this.appVersion,
   });
 }
 
@@ -74,4 +82,8 @@ abstract class MwendoGpsEnginePlatform extends PlatformInterface {
   Future<void> resume();
   Future<RecordingSummary> stop();
   Stream<EngineState> get state;
+  
+  Future<EnginePlatformMetadata> getPlatformMetadata() async {
+    throw UnimplementedError('getPlatformMetadata() has not been implemented.');
+  }
 }

@@ -4,7 +4,7 @@ import 'models.dart';
 class GateResult {
   final bool passes;
   final double weight;
-  final String? rejectReason;
+  final RejectReason? rejectReason;
 
   const GateResult({
     required this.passes,
@@ -23,7 +23,7 @@ class QualityGate {
       return const GateResult(
         passes: false,
         weight: 0.0,
-        rejectReason: 'zero_accuracy',
+        rejectReason: RejectReason.zeroAccuracy,
       );
     }
 
@@ -31,7 +31,7 @@ class QualityGate {
       return const GateResult(
         passes: false,
         weight: 0.0,
-        rejectReason: 'poor_accuracy',
+        rejectReason: RejectReason.poorAccuracy,
       );
     }
 
