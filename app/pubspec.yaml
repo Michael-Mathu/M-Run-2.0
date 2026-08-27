@@ -24,7 +24,7 @@ dependencies:
   url_launcher: ^6.2.5
   share_plus: ^13.2.0
   xml: ^7.0.1
-  google_fonts: ^6.2.1
+  google_fonts: ^8.2.1
   shimmer: ^3.0.0
   confetti: ^0.8.0
   shared_preferences: ^2.3.2
