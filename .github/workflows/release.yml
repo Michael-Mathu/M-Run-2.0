@@ -32,7 +32,7 @@ jobs:
           flutter build apk --release
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           files: app/build/app/outputs/flutter-apk/app-release.apk
           tag_name: ${{ github.ref_name }}
