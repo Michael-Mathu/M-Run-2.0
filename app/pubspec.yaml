@@ -28,7 +28,7 @@ dependencies:
   shimmer: ^3.0.0
   confetti: ^0.8.0
   shared_preferences: ^2.3.2
-  permission_handler: ^11.4.0
+  permission_handler: ^13.0.2
   image_picker: ^1.1.2
   mwendo_gps_engine:
     path: ../packages/mwendo_gps_engine
